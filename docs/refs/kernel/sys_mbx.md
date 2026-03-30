@@ -94,9 +94,17 @@ ER_ID sys_acre_mbx(W apic, T_CMBX* pk_cmbx)
 | apic | W | APIC ID |
 | pk_cmbx | T_CMBX* | 生成情報パケット |
 
-**戻り値:** E_OK (現在の実装はスタブ)
+**戻り値:**
+| 値 | 説明 |
+|------|------|
+| 正値 | 自動割り当てされたメールボックス ID |
+| E_NOID | 空き ID なし |
+| E_ID / E_OBJ | `sys_cre_mbx` 委譲時のエラー |
 
-**処理内容:** 未実装。E_OK を返すのみ。
+**処理内容:**
+1. ID 1 から `MAX_MBXID` まで順にスキャンし、`act == 0` の空きエントリを探す
+2. 見つかったら `sys_cre_mbx(apic, i, pk_cmbx)` に委譲して生成
+3. 生成成功なら割り当てた ID を返す。空きがなければ `E_NOID` を返す
 
 ---
 
@@ -127,7 +135,7 @@ ER sys_del_mbx(W apic, ID mbxid)
 3. 待ちキューを空リストにリセット
 4. `act = 0` で削除完了
 
-**注意:** 現在の実装では、待ちキューに残っているタスクに対する E_DLT 通知処理が実装されていない。
+**注意:** 待ちキューに残っているタスクには `proc_set_return_value(t->proc, E_DLT)` で E_DLT が通知され、`TTS_RDY` に変更されてスケジューラキューに挿入される。
 
 ---
 
@@ -334,4 +342,4 @@ void mbx_rem(ID mbxid, PRI pri)
 - メッセージの実体はカーネルがコピーしない。送信側が確保したメモリ領域のポインタをそのまま受信側に渡す方式。メッセージ先頭の `sizeof(T_MSG)` バイト (ポインタ1個分) はカーネルが連結リストのリンクに使用するため、ユーザーデータはその直後に配置する必要がある。
 - `TA_MPRI` 属性の場合、メッセージは `T_MSG_PRI` 構造体として扱われ、`msgpri` フィールドで優先度が決まる。
 - `sys_prcv_mbx` および `sys_trcv_mbx` のスキャン範囲は `i < maxmpri` (maxmpri 未満) となっており、`maxmpri` そのものの優先度キューはスキャンされない点に注意。
-- `sys_acre_mbx` は未実装 (スタブ)。
+- `sys_acre_mbx` は空き ID を自動検索して `sys_cre_mbx` に委譲する。

@@ -142,9 +142,13 @@ ER_ID sys_acre_sem(W apic, T_CSEM* pk_csem)
 | `apic` | `W` | APIC ID |
 | `pk_csem` | `T_CSEM*` | セマフォ生成情報パケット |
 
-**戻り値:** `E_OK`
+**戻り値:** 割り当てた ID (正値) またはエラーコード
 
-**処理内容:** 現時点ではスタブ実装 (`E_OK` を返すのみ)。ID 自動割り当ては未実装。
+**処理内容:**
+1. `sem[1]` から `sem[MAX_SEMID]` まで走査し、`act == 0` の未使用エントリを検索
+2. 見つかれば `sys_cre_sem(apic, i, pk_csem)` に委譲して生成
+3. 成功時は割り当てた ID を返す
+4. 空きが見つからなければエラーを返す
 
 ---
 
@@ -172,18 +176,18 @@ ER sys_del_sem(W apic, ID semid)
 | `E_NOEXS` | セマフォ未生成 |
 
 **処理内容:**
-1. スピンロック取得
-2. ID・存在チェック
-3. 待ちキューを走査し、全ての待ちタスクに対して:
+1. ID・存在チェック
+2. 待ちキューを走査し、全ての待ちタスクに対して:
+   - `sched_timeout_rem_if_exist()` でタイムアウトキューから tlink を除去
    - `tskstat` を `TTS_RDY` に変更
-   - タスクの `proc->reg[EAX]` に `E_DLT` を設定 (syscall 戻り値)
+   - `proc_set_return_value(t->proc, E_DLT)` で syscall 戻り値を設定
    - `sched_ins()` でレディキューに挿入
-4. 待ちキューを空にリセット
-5. `act = 0` に設定
+3. 待ちキューを空にリセット
+4. `act = 0` に設定
 
 **呼び出し元:** ユーザーコード (`del_sem`)
 
-**注意点:** 待ちタスクへのエラー通知は `proc->reg[EAX]` に直接書き込むことで、syscall の戻り値として反映される。
+**注意点:** 待ちタスクへのエラー通知は `proc_set_return_value()` で pt_regs フレームの EAX スロットに書き込むことで、`RESTORE_ALL` 時に syscall の戻り値として反映される。
 
 ---
 
@@ -212,13 +216,13 @@ ER sys_sig_sem(W apic, ID semid)
 | `E_QOVR` | カウント上限超過 (`semcnt + 1 > maxsem`) |
 
 **処理内容:**
-1. スピンロック取得
-2. ID・存在チェック
-3. `semcnt + 1 > maxsem` ならオーバーフロー
+1. ID・存在チェック
+2. `semcnt + 1 > maxsem` ならオーバーフロー
 4. 待ちタスクが存在する場合 (`wlink.next != &wlink`):
+   - `sched_timeout_rem_if_exist()` でタイムアウトキューから tlink を除去
    - 先頭タスクを `TTS_RDY` に変更
    - `sched_ins()` でレディキューに挿入
-   - `proc->reg[EAX]` に `E_OK` を設定
+   - `proc_set_return_value(t->proc, E_OK)` で戻り値を設定
    - `wlink_rem()` で待ちキューから削除
 5. 待ちタスクがない場合: `semcnt` をインクリメント
 
@@ -245,7 +249,11 @@ ER sys_isig_sem(W apic, ID semid)
 
 **戻り値:** `E_OK`
 
-**処理内容:** 現時点ではスタブ実装 (`E_OK` を返すのみ)。
+**戻り値:** `sys_sig_sem` の戻り値と同じ。
+
+**処理内容:** `sys_sig_sem(apic, semid)` に委譲する。
+
+**呼び出し元:** ISR 内から呼ばれることを想定した API。
 
 ---
 
@@ -297,10 +305,9 @@ ER sys_pol_sem(W apic, ID semid)
 | `E_TMOUT` | 資源なし (セマフォカウントが 0) |
 
 **処理内容:**
-1. スピンロック取得
-2. ID・存在チェック
-3. `semcnt == 0` なら `E_TMOUT`
-4. `semcnt > 0` なら `semcnt` をデクリメント
+1. ID・存在チェック
+2. `semcnt == 0` なら `E_TMOUT`
+3. `semcnt > 0` なら `semcnt` をデクリメント
 
 **呼び出し元:** ユーザーコード (`pol_sem`)
 
@@ -334,9 +341,8 @@ ER sys_twai_sem(W apic, ID semid, TMO tmout)
 | `E_TMOUT` | タイムアウトまたはポーリング失敗 |
 
 **処理内容:**
-1. スピンロック取得
-2. ID・存在チェック
-3. `semcnt == 0` (資源なし) の場合:
+1. ID・存在チェック
+2. `semcnt == 0` (資源なし) の場合:
    - `TMO_POL` なら即座に `E_TMOUT`
    - `sematr == TA_TFIFO` なら `ins_fifo()` で FIFO 順に待ちキューに挿入
    - それ以外 (`TA_TPRI`) なら `ins_pri()` で優先度順に待ちキューに挿入
@@ -347,7 +353,7 @@ ER sys_twai_sem(W apic, ID semid, TMO tmout)
 
 **呼び出し元:** `sys_wai_sem`、ユーザーコード (`twai_sem`)
 
-**注意点:** 待ちから正常に起床された場合の戻り値は `sys_sig_sem` 内で `proc->reg[EAX]` に `E_OK` が書き込まれるため、ここでの `E_TMOUT` は上書きされる。
+**注意点:** 待ちから正常に起床された場合の戻り値は `sys_sig_sem` 内で `proc_set_return_value()` により pt_regs フレームの EAX スロットに `E_OK` が書き込まれるため、ここでの `E_TMOUT` は上書きされる。
 
 ---
 
@@ -379,8 +385,7 @@ typedef struct t_rsem {
 **戻り値:** `E_OK`、`E_ID`、`E_NOEXS`
 
 **処理内容:**
-1. スピンロック取得
-2. 待ちキューが空なら `wtskid = TSK_NONE`、空でなければ先頭タスクの ID を設定
+1. 待ちキューが空なら `wtskid = TSK_NONE`、空でなければ先頭タスクの ID を設定
 3. `semcnt` を設定
 
 **呼び出し元:** ユーザーコード (`ref_sem`)
@@ -520,7 +525,7 @@ void wlink_dump(T_LINK* base)
 
 ### 待ちキューと起床メカニズム
 
-セマフォで待ち状態に入る際は、タスクの `wlink` を待ちキューに挿入した後、`sys_slp_tsk()` / `sys_tslp_tsk()` を呼んでタスクをブロックする。起床は `sys_sig_sem()` 内で `proc->reg[EAX]` にシステムコール戻り値を直接書き込むことで行われる。
+セマフォで待ち状態に入る際は、タスクの `wlink` を待ちキューに挿入した後、`sys_slp_tsk()` / `sys_tslp_tsk()` を呼んでタスクをブロックする。起床は `sys_sig_sem()` 内で `proc_set_return_value()` により pt_regs フレームの EAX スロットにシステムコール戻り値を書き込むことで行われる。
 
 ### デモでの使用例
 

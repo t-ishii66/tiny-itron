@@ -91,7 +91,7 @@ ER sys_cre_mbf(W apic, ID mbfid, T_CMBF* pk_cmbf)
 6. `mbf_end` にアライン済み末尾アドレスを設定
 7. `act = 1`, `smsgcnt = 0` で生成完了
 
-**注意:** `mbf_r` と `mbf_w` の初期化が明示的に行われていない (0 初期化に依存)。
+**注意:** `mbf_r` と `mbf_w` はバッファ先頭アドレス (アライン済みの `mbf`) で明示的に初期化される。
 
 ---
 
@@ -109,9 +109,13 @@ ER_ID sys_acre_mbf(W apic, T_CMBF* pk_cmbf)
 | apic | W | APIC ID |
 | pk_cmbf | T_CMBF* | 生成情報パケット |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:** 割り当てた ID (正値) またはエラーコード (`E_NOID`: 空きなし)
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:**
+1. `mbf[1]` から `mbf[MAX_MBFID]` まで走査し、`act == 0` の未使用エントリを検索
+2. 見つかれば `sys_cre_mbf(apic, i, pk_cmbf)` に委譲して生成
+3. 成功時は割り当てた ID を返す
+4. 空きが見つからなければ `E_NOID` を返す
 
 ---
 
@@ -183,9 +187,9 @@ ER sys_psnd_mbf(W apic, ID mbfid, VP msg, UINT msgsz)
 | msg | VP | メッセージデータポインタ |
 | msgsz | UINT | メッセージサイズ |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:** `sys_tsnd_mbf` の戻り値と同じ。
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:** `sys_tsnd_mbf(apic, mbfid, msg, msgsz, TMO_POL)` に委譲する。
 
 ---
 
@@ -218,7 +222,8 @@ ER sys_tsnd_mbf(W apic, ID mbfid, VP msg, UINT msgsz, TMO tmout)
 1. ID・存在チェック
 2. 受信待ちタスクが存在する場合:
    - メッセージデータを受信タスクのバッファに直接コピー (`bcopy`)
-   - 戻り値レジスタにメッセージサイズを設定
+   - `proc_set_return_value()` でメッセージサイズを設定
+   - `sched_timeout_rem_if_exist()` でタイムアウトキューから tlink を除去
    - 待ちキューから除去し、`TTS_RDY` に変更してスケジューラキューに挿入
    - E_OK を返す
 3. 受信待ちタスクがいない場合:
@@ -265,9 +270,9 @@ ER_UINT sys_prcv_mbf(W apic, ID mbfid, VP msg)
 | mbfid | ID | メッセージバッファ ID |
 | msg | VP | 受信バッファポインタ |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:** `sys_trcv_mbf` の戻り値と同じ (正常時: メッセージサイズ、失敗時: `E_TMOUT`)。
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:** `sys_trcv_mbf(apic, mbfid, msg, TMO_POL)` に委譲する。
 
 ---
 
@@ -511,5 +516,5 @@ void mbf_do_get(ID mbfid, VP msg, UINT msgsz)
 - リングバッファの各メッセージには 4 バイトのサイズプレフィクスが付加される。実効的なバッファ容量は `mbfsz` より `sizeof(unsigned long)` 分少なくなる。
 - バッファ先頭と末尾は 4 バイト境界にアラインされる。これにより、アラインされていないアドレスからの `kmem_alloc` でも正しく動作する。
 - `mbf_rcv_check` 関数が実装されているが、現在のコードからは呼び出されていない (将来的な使用のための予備実装)。
-- `sys_psnd_mbf`, `sys_prcv_mbf`, `sys_acre_mbf` は未実装。
+- `sys_psnd_mbf` は `sys_tsnd_mbf(TMO_POL)` に、`sys_prcv_mbf` は `sys_trcv_mbf(TMO_POL)` に、`sys_acre_mbf` は空き ID を走査して `sys_cre_mbf` にそれぞれ委譲する。
 - 送信待ちと受信待ちで別々のキュー (`wlink_s`, `wlink_r`) を持つ。両方のキューに同時にタスクが存在することは通常発生しない。

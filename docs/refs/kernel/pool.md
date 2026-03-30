@@ -12,7 +12,7 @@
 
 各プールは `allocation_t` 構造体の配列で管理され、ファーストフィット方式でメモリの確保・解放を行う。解放時には隣接する空きブロックの自動マージ (コアレッシング) を実行する。
 
-SMP 環境でのスレッドセーフ性は、スタックプールとメモリプールそれぞれに独立したスピンロック (`pool_stack_lk`, `pool_mem_lk`) で保証される。カーネルメモリプール (`kmem_alloc`/`kmem_free`) は呼び出し元が `kernel_lk` (Big Kernel Lock) を保持しているため、独自のスピンロックを持たない。
+SMP 環境でのスレッドセーフ性は、全てのプール操作の呼び出し元が `kernel_lk` (Big Kernel Lock) を保持していることで保証される。プール固有のスピンロックは存在しない。
 
 ## 定数・マクロ
 
@@ -53,8 +53,6 @@ typedef struct allocation {
 | `stack_pool` | `allocation_t[MAX_STACK_POOL]` | static (poolP.h) | スタックプールの管理配列 (256 エントリ) |
 | `mem_pool` | `allocation_t[MAX_MEM_POOL]` | static (poolP.h) | メモリプールの管理配列 (256 エントリ) |
 | `kmem_pool` | `allocation_t[MAX_KMEM_POOL]` | static (poolP.h) | カーネルメモリプールの管理配列 (256 エントリ) |
-| `pool_stack_lk` | `unsigned long` | static (pool.c) | スタックプール操作用スピンロック |
-| `pool_mem_lk` | `unsigned long` | static (pool.c) | メモリプール操作用スピンロック |
 
 ## 関数リファレンス
 
@@ -267,7 +265,7 @@ ER stack_init(VP start, VP end);
 VP stack_alloc(SIZE stksz);
 ```
 
-**概要:** スタックプールからメモリを確保する (スピンロック保護付き)。
+**概要:** スタックプールからメモリを確保する。
 
 **引数:**
 
@@ -279,11 +277,9 @@ VP stack_alloc(SIZE stksz);
 - 確保したブロックのベースアドレス -- 成功
 - `NULL` -- 確保失敗
 
-**処理内容:**
-1. `pool_stack_lk` スピンロックを取得
-2. `pool_alloc(stack_pool, stksz, MAX_STACK_POOL)` を呼び出し
-3. スピンロック解放
-4. 結果を返す
+**処理内容:** `pool_alloc(stack_pool, stksz, MAX_STACK_POOL)` を呼び出す。
+
+**前提条件:** caller holds `kernel_lk`
 
 **呼び出し元:** `proc_create()` (i386/proc.c), `first_task()` (kernel/user.c) -- タスク作成時のスタック確保
 
@@ -299,7 +295,7 @@ VP stack_alloc(SIZE stksz);
 void stack_free(VP stk);
 ```
 
-**概要:** スタックプールのメモリを解放する (スピンロック保護付き)。
+**概要:** スタックプールのメモリを解放する。
 
 **引数:**
 
@@ -309,10 +305,9 @@ void stack_free(VP stk);
 
 **戻り値:** なし (void)
 
-**処理内容:**
-1. `pool_stack_lk` スピンロックを取得
-2. `pool_free(stack_pool, stk)` を呼び出し
-3. スピンロック解放
+**処理内容:** `pool_free(stack_pool, stk)` を呼び出す。
+
+**前提条件:** caller holds `kernel_lk`
 
 **呼び出し元:** タスク削除時
 
@@ -371,7 +366,7 @@ ER mem_init(VP start, VP end);
 VP mem_alloc(SIZE stksz);
 ```
 
-**概要:** ユーザーメモリプール (PTE_USER ページ) からメモリを確保する (スピンロック保護付き)。ユーザータスクがアクセスするメモリ (MPF ブロック、MPL プール領域) の確保に使用する。
+**概要:** ユーザーメモリプール (PTE_USER ページ) からメモリを確保する。ユーザータスクがアクセスするメモリ (MPF ブロック、MPL プール領域) の確保に使用する。
 
 **引数:**
 
@@ -383,11 +378,9 @@ VP mem_alloc(SIZE stksz);
 - 確保したブロックのベースアドレス -- 成功
 - `NULL` -- 確保失敗
 
-**処理内容:**
-1. `pool_mem_lk` スピンロックを取得
-2. `pool_alloc(mem_pool, stksz, MAX_MEM_POOL)` を呼び出し
-3. スピンロック解放
-4. 結果を返す
+**処理内容:** `pool_alloc(mem_pool, stksz, MAX_MEM_POOL)` を呼び出す。
+
+**前提条件:** caller holds `kernel_lk`
 
 **呼び出し元:** `sys_cre_mpf` (ブロック領域), `sys_cre_mpl` (プール領域) — ユーザータスクに返すメモリの確保
 
@@ -401,7 +394,7 @@ VP mem_alloc(SIZE stksz);
 void mem_free(VP stk);
 ```
 
-**概要:** ユーザーメモリプール (PTE_USER ページ) のメモリを解放する (スピンロック保護付き)。
+**概要:** ユーザーメモリプール (PTE_USER ページ) のメモリを解放する。
 
 **引数:**
 
@@ -411,10 +404,9 @@ void mem_free(VP stk);
 
 **戻り値:** なし (void)
 
-**処理内容:**
-1. `pool_mem_lk` スピンロックを取得
-2. `pool_free(mem_pool, stk)` を呼び出し
-3. スピンロック解放
+**処理内容:** `pool_free(mem_pool, stk)` を呼び出す。
+
+**前提条件:** caller holds `kernel_lk`
 
 **呼び出し元:** `sys_del_mpf` (ブロック領域), `sys_del_mpl` (プール領域)
 
@@ -562,6 +554,4 @@ allocation_t 配列:
 
 ### SMP 安全性
 
-`stack_alloc`/`stack_free` と `mem_alloc`/`mem_free` はそれぞれ独立したスピンロック (`pool_stack_lk`, `pool_mem_lk`) で保護されており、異なるプールへの同時アクセスは許可される。同一プールへの同時アクセスはスピンロックにより直列化される。
-
-`kmem_alloc`/`kmem_free` は独自のスピンロックを持たない。呼び出し元の syscall ハンドラが `kernel_lk` (Big Kernel Lock) を保持しているため、暗黙的に排他制御される。
+全てのプール操作関数 (`stack_alloc`/`stack_free`, `mem_alloc`/`mem_free`, `kmem_alloc`/`kmem_free`) は、呼び出し元が `kernel_lk` (Big Kernel Lock) を保持していることを前提とする。プール固有のスピンロックは存在しない。

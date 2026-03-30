@@ -449,7 +449,7 @@ ER dly_tsk(RELTIM dlytim);
 
 **処理内容:** `syscall(-TFN_DLY_TSK, dlytim)` を呼び出す。
 
-**注意:** カーネル側の `sys_dly_tsk` はスタブ実装 (E_OK を返すのみ、実際の遅延なし) である。
+**注意:** カーネル側の `sys_dly_tsk` は `sys_tslp_tsk` に委譲して実際の遅延を行う。タイムアウト満了時に E_OK が返る。
 
 ---
 

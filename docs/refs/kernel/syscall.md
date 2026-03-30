@@ -108,7 +108,7 @@ W itron_syscall(unsigned long apic, unsigned long sysid, unsigned long arg1,
 **注意点:**
 - sysid は itron.h の TFN_* 定数の符号を反転した正の値。例: TFN_CRE_TSK = -0x05 → sysid = 0x05
 - テーブル範囲外のインデックスに対する境界チェックは行われない
-- 戻り値は c_intr_syscall により `proc->stack - 20` (save フレームの EAX スロット) に書き込まれ、ユーザー空間に返される
+- 戻り値は c_intr_syscall により `regs->eax` (per-task カーネルスタック上の pt_regs フレーム) に書き込まれ、RESTORE_ALL + iret でユーザー空間に返される
 
 ---
 
@@ -122,14 +122,14 @@ ER sys_dummy(void);
 
 **引数:** なし (可変長引数で呼ばれるが無視)
 
-**戻り値:** `E_OK` (0) -- 常に成功
+**戻り値:** `E_NOSPT` (-17) -- 未サポートエラー
 
-**処理内容:** 何もせず E_OK を返す。
+**処理内容:** 何もせず E_NOSPT を返す。
 
 **呼び出し元:** syscall_entry[] および syscall_tcpip_entry[] の未実装エントリから呼び出される。
 
 **注意点:**
-- 未実装のシステムコールが呼ばれてもエラーにはならず、E_OK が返る。デバッグ時に意図しない成功として問題を隠蔽する可能性がある。
+- 未実装のシステムコールが呼ばれると E_NOSPT が返される。
 
 ## 補足
 
@@ -137,17 +137,17 @@ ER sys_dummy(void);
 
 ```
 ユーザータスク (Ring 3)
-  ↓ INT 0x99 (VECT_SYSCALL)
-intr.s: syscall ハンドラ (Ring 0)
-  ↓ save コンテキスト
-c_intr_syscall()
+  ↓ lcall SEL_SYSCALL (コールゲート経由)
+intr.s: intr_syscall → SAVE_ALL (per-task カーネルスタックにレジスタ保存)
+  ↓ pt_regs* をスタックから構築
+c_intr_syscall(pt_regs*)
   ↓ sysid 取得、引数展開
 itron_syscall(apic, sysid, args...)
   ↓ テーブルルックアップ
 sys_xxx_yyy(apic, args...)
   ↓ 戻り値
-c_intr_syscall: proc->stack - 20 に書き込み
-  ↓ restore コンテキスト
+c_intr_syscall: regs->eax に書き込み
+  ↓ RESTORE_ALL + iret
 ユーザータスク (Ring 3) に復帰
 ```
 

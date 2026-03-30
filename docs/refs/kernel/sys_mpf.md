@@ -94,9 +94,17 @@ ER_ID sys_acre_mpf(W apic, T_CMPF* pk_cmpf)
 | apic | W | APIC ID |
 | pk_cmpf | T_CMPF* | 生成情報パケット |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:**
+| 値 | 説明 |
+|------|------|
+| 正値 | 自動割り当てされたメモリプール ID |
+| E_NOID | 空き ID なし |
+| E_ID / E_OBJ | `sys_cre_mpf` 委譲時のエラー |
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:**
+1. ID 1 から `MAX_MPFID` まで順にスキャンし、`act == 0` の空きエントリを探す
+2. 見つかったら `sys_cre_mpf(apic, i, pk_cmpf)` に委譲して生成
+3. 生成成功なら割り当てた ID を返す。空きがなければ `E_NOID` を返す
 
 ---
 
@@ -166,9 +174,9 @@ ER sys_pget_mpf(W apic, ID mpfid, VP* p_blk)
 | mpfid | ID | メモリプール ID |
 | p_blk | VP* | 取得ブロックポインタ格納先 |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:** `sys_tget_mpf(apic, mpfid, p_blk, TMO_POL)` の戻り値
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:** `sys_tget_mpf` に `TMO_POL` (ポーリング) を指定して委譲する。
 
 ---
 
@@ -276,5 +284,5 @@ ER sys_ref_mpf(W apic, ID mpfid, T_RMPF* pk_rmpf)
 
 - プール管理は `pool.h` / `pool.c` のアロケータに委譲される。`pool_init`, `pool_alloc`, `pool_free` 関数でブロックの管理を行う。
 - `sys_rel_mpf` では、待ちタスクが存在する場合にプールを経由せず直接ブロックを渡す最適化が行われている。これにより不要な `pool_free` + `pool_alloc` の往復を回避する。
-- `sys_pget_mpf`, `sys_acre_mpf` は未実装。
+- `sys_pget_mpf` は `sys_tget_mpf(TMO_POL)` に委譲する。`sys_acre_mpf` は空き ID を自動検索して `sys_cre_mpf` に委譲する。
 - `sys_ref_mpf` の `fblkcnt` は未実装 (常に 0)。正確な空きブロック数を返すには `pool_free_size()` 関数の実装が必要。

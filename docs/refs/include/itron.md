@@ -550,6 +550,13 @@ syscall ディスパッチに使用されるファンクションコード。全
 |------|------|------|
 | `TFN_EXD_PRINT` | `-0xe1` | カーネル printf (printk) |
 | `TFN_EXD_TCPIP` | `-0xe2` | TCP/IP スタック (拡張) |
+| `TFN_EXD_VGA_WRITE` | `-0xe3` | VGA テキスト書き込み (vga_write_at) |
+| `TFN_EXD_VGA_DEC` | `-0xe4` | VGA 10 進数表示 (vga_write_dec_at) |
+| `TFN_EXD_VGA_CLEAR` | `-0xe5` | VGA 画面クリア (vga_clear) |
+| `TFN_EXD_VGA_FILL` | `-0xe6` | VGA 矩形塗りつぶし (vga_fill_at) |
+| `TFN_EXD_KEY_GETC` | `-0xe7` | キーボード文字取得 (key_getc) |
+| `TFN_EXD_KEY_SETTASK` | `-0xe8` | キーボードタスク ID 設定 (set key_task_id) |
+| `TFN_EXD_STACK_ALLOC` | `-0xe9` | タスクスタック確保 (tsk_stack_alloc) |
 
 ## API 関数宣言 (条件コンパイルにより無効化)
 

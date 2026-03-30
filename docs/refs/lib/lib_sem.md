@@ -353,7 +353,7 @@ ER ref_flg(ID flgid, T_RFLG* pk_rflg);
 
 ---
 
-### データキュー (12 関数)
+### データキュー (13 関数)
 
 #### cre_dtq
 
@@ -716,6 +716,6 @@ ER ref_mbx(ID mbxid, T_RMBX* pk_rmbx);
 
 - セマフォ: 9 関数 (cre/acre/del/sig/isig/wai/pol/twai/ref)
 - イベントフラグ: 10 関数 (cre/acre/del/set/iset/clr/wai/pol/twai/ref)。`iset_flg` は空のスタブ。
-- データキュー: 12 関数 (cre/acre/del/snd/psnd/tsnd/fsnd/ipsnd/ifsnd/rcv/prcv/trcv/ref)。`ipsnd_dtq` は `#if 0` で無効、`ifsnd_dtq` は空のスタブ。
+- データキュー: 13 関数 (cre/acre/del/snd/psnd/tsnd/fsnd/ipsnd/ifsnd/rcv/prcv/trcv/ref)。`ipsnd_dtq` は `#if 0` で無効、`ifsnd_dtq` は空のスタブ。
 - メールボックス: 7 関数 (cre/acre/del/snd/rcv/prcv/ref)。
 - `ifsnd_dtq` の引数名が `ddtqid` (d が重複) となっている。

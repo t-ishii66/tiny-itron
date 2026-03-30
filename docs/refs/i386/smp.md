@@ -330,12 +330,12 @@ void smp_init(void)
    - `key_start()` でキーボード (IRQ1) を有効化
 
 8. **タスク起動:**
-   - `start_first_task()` でハードウェア TSS スイッチにより Ring 3 の `first_task` に遷移
+   - `start_first_task()` で `ltr(SEL_TSS0)` + ESP ロード + `ret` → `RESTORE_ALL` + `iret` により Ring 3 の `first_task` に遷移
 
 **呼び出し元:** `main()` (BSP パス)
 
 **注意点:**
-- `start_first_task()` は戻らない。`ljmp SEL_TSS0` でハードウェアタスクスイッチを行い、Ring 3 の `first_task()` に直接遷移する。
+- `start_first_task()` は戻らない。`ltr` で Task Register をロードし、`proc[1].kern_esp` を ESP にロードして `ret` → `intr_return_restore` → `RESTORE_ALL` + `iret` で Ring 3 に遷移する。
 - SIPI のベクタ値 `0x03` は「AP の開始物理アドレス / 0x1000」を意味する。つまり `0x03 * 0x1000 = 0x3000`。
 - タイマーとキーボードの開始は AP のハンドシェイク完了後に行う。これにより、AP の初期化が完了する前に割り込みが発生することを防ぐ。
 
@@ -355,23 +355,20 @@ void smp_ap_init(void)
 
 **処理内容:**
 
-1. **TR レジスタロード:**
-   - `cltr(SEL_TSS_DUMMY1)` で CPU 1 用ダミー TSS をロード
-
-2. **Local APIC 有効化:**
+1. **Local APIC 有効化:**
    - SVR の `APIC_ENABLED` ビットをセット
    - スプリアスベクタを `VECT_APIC` (0x98) に設定
 
-3. **APIC タイマー設定:**
+2. **APIC タイマー設定:**
    - 分周値を `APIC_TIMER_DIV_16` に設定
    - 周期モードで `VECT_SMP_TIMER1` (0x9b) ベクタを設定
    - 初期カウントを `MAX_TIMER_COUNT` に設定
 
-4. **ハンドシェイク:**
+3. **ハンドシェイク:**
    - `cpu_second = 1` で BSP に初期化完了を通知
 
-5. **タスク起動:**
-   - `start_second_task()` でハードウェア TSS スイッチにより Ring 3 の `second_task` に遷移
+4. **タスク起動:**
+   - `start_second_task()` で `ltr(SEL_TSS1)` + ESP ロード + `ret` → `RESTORE_ALL` + `iret` により Ring 3 の `second_task` に遷移
 
 **呼び出し元:** `main()` (AP パス)
 
@@ -396,13 +393,14 @@ BSP (CPU 0):                          AP (CPU 1):
     delay                               Protected Mode 遷移
     SIPI 送信 (2回目) ─────────────→  (既に実行中なら無視)
     while (!cpu_second) 待機             run.s → main() → smp_ap_init()
-                                          TR ロード
                                           APIC 有効化
                                           タイマー設定
     cpu_second=1 検出 ←────────────   cpu_second = 1
     timer_start()                         start_second_task()
-    key_start()                           → Ring 3 second_task()
-    start_first_task()
+    key_start()                           ltr + ESP load + ret
+    start_first_task()                    → RESTORE_ALL + iret
+    ltr + ESP load + ret                  → Ring 3 second_task()
+    → RESTORE_ALL + iret
     → Ring 3 first_task()
 ```
 

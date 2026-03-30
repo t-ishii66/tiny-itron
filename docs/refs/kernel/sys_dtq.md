@@ -165,7 +165,11 @@ ER_ID sys_acre_dtq(W apic, T_CDTQ* pk_cdtq)
 
 **戻り値:** `E_OK`
 
-**処理内容:** 現時点ではスタブ実装 (`E_OK` を返すのみ)。ID 自動割り当ては未実装。
+**処理内容:**
+1. `dtq[1]` から `dtq[MAX_DTQID]` まで走査し、`act == 0` の未使用エントリを検索
+2. 見つかれば `sys_cre_dtq(apic, i, pk_cdtq)` に委譲して生成
+3. 成功時は割り当てた ID を返す
+4. 空きが見つからなければエラーを返す
 
 ---
 
@@ -187,18 +191,18 @@ ER sys_del_dtq(W apic, ID dtqid)
 **戻り値:** `E_OK`
 
 **処理内容:**
-1. `dtq_alloc == 1` なら `kmem_free()` でバッファ解放
+1. ID 範囲チェック、存在チェック
 2. 受信待ちキュー (`wlink_r`) を走査:
-   - 各待ちタスクを `TTS_RDY` に変更
+   - 各待ちタスクの `tlink` を `sched_timeout_rem_if_exist()` でタイムアウトキューから除去
+   - タスクを `TTS_RDY` に変更
+   - `proc_set_return_value(t->proc, E_DLT)` で戻り値を設定
    - `sched_ins()` でレディキューに挿入
-   - `proc->reg[EAX]` に `E_DLT` を設定
 3. 送信待ちキュー (`wlink_w`) を走査: 同様に全待ちタスクを起床
 4. 両待ちキューを空にリセット
-5. `act = 0` に設定
+5. `dtq_alloc == 1` なら `kmem_free()` でバッファ解放
+6. `act = 0` に設定
 
 **呼び出し元:** ユーザーコード (`del_dtq`)
-
-**注意点:** ID 範囲チェックと存在チェックが行われていない。
 
 ---
 
@@ -252,6 +256,7 @@ ER sys_psnd_dtq(W apic, ID dtqid, VP_INT data)
 **処理内容:**
 1. 次の書き込み位置を計算 (`next_w = w + 1`、末尾なら先頭に巻き戻し)
 2. 受信待ちタスクが存在する場合:
+   - `sched_timeout_rem_if_exist()` でタイムアウトキューから tlink を除去
    - `wlink_rem()` で待ちキューから削除
    - タスクを `TTS_RDY` に変更
    - タスクの `p_data` にデータを書き込み
@@ -290,6 +295,7 @@ ER ipsnd_dtq(W apic, ID dtqid, VP_INT data)
 **処理内容:**
 1. 次の書き込み位置を計算 (巻き戻し含む)
 2. 受信待ちタスクが存在する場合:
+   - `sched_timeout_rem_if_exist()` でタイムアウトキューから tlink を除去
    - `wlink_rem()` で待ちキューから削除
    - タスクを `TTS_RDY` に変更
    - タスクの `p_data` にデータを書き込み
@@ -331,7 +337,7 @@ ER sys_tsnd_dtq(W apic, ID dtqid, VP_INT data, TMO tmout)
 **処理内容:**
 1. 次の書き込み位置を計算
 2. 受信待ちタスクが存在する場合:
-   - 直接データを渡して起床 (バッファを経由しない)
+   - `sched_timeout_rem_if_exist()` で tlink を除去し、直接データを渡して起床 (バッファを経由しない)
 3. バッファ満杯の場合:
    - `TMO_POL` なら `E_TMOUT`
    - 待ちキュー (`wlink_w`) にタスクを挿入:
@@ -368,7 +374,7 @@ ER sys_fsnd_dtq(W apic, ID dtqid, VP_INT data)
 
 **処理内容:**
 1. 次の書き込み位置を計算
-2. 受信待ちタスクが存在する場合: 直接データを渡して起床
+2. 受信待ちタスクが存在する場合: `sched_timeout_rem_if_exist()` で tlink を除去し、直接データを渡して起床
 3. バッファ満杯の場合:
    - `r` を 1 つ進める (最古のデータを破棄、巻き戻し処理あり)
 4. バッファに書き込み、`w` を進める
@@ -397,7 +403,7 @@ ER sys_ifsnd_dtq(W apic, ID dtqid, VP_INT data)
 
 **戻り値:** `E_OK`
 
-**処理内容:** 現時点ではスタブ実装 (`E_OK` を返すのみ)。
+**処理内容:** `sys_fsnd_dtq(apic, dtqid, data)` に委譲する。
 
 ---
 
@@ -501,7 +507,6 @@ ER sys_trcv_dtq(W apic, ID dtqid, VP_INT* p_data, TMO tmout)
 
 **注意点:**
 - 送信待ちタスクからのデータ受け取り処理 (送信待ちキューのチェック) はコメントアウトされている (`#if 0` ブロック)。現在の実装ではバッファが空で送信待ちタスクがいる場合、送信待ちタスクのデータは受け取れない。
-- ID 範囲チェック・存在チェックが行われていない。
 
 ---
 
@@ -531,9 +536,13 @@ typedef struct t_rdtq {
 } T_RDTQ;
 ```
 
-**戻り値:** `E_OK`
+**戻り値:** `E_OK`、`E_ID`、`E_NOEXS`
 
-**処理内容:** 現時点ではスタブ実装 (`E_OK` を返すのみ、参照情報の設定なし)。
+**処理内容:**
+1. ID 範囲チェック、存在チェック
+2. 送信待ちキューが空なら `stskid = TSK_NONE`、空でなければ先頭タスクの ID を設定
+3. 受信待ちキューが空なら `rtskid = TSK_NONE`、空でなければ先頭タスクの ID を設定
+4. `sdtqcnt` にバッファ内のデータ数を設定
 
 ## 補足
 
@@ -562,12 +571,7 @@ if (next_w >= (VW)dtq[dtqid].dtq + dtq[dtqid].dtqcnt) {
 
 キーボード入力のデモで使用される。キーボード割り込みハンドラ (`key_intr`) が `ipsnd_dtq()` でキーコードをデータキューに送信し、`kbd_task` (Task 4) が `rcv_dtq()` でデータを受信して VGA に表示する。
 
-### 未実装・制限事項
+### 制限事項
 
-- `sys_acre_dtq`: ID 自動割り当ては未実装
-- `sys_ifsnd_dtq`: 割り込みからの強制送信は未実装
-- `sys_ref_dtq`: 参照情報の設定は未実装
-- `sys_trcv_dtq`: 送信待ちタスクからのデータ受け取りがコメントアウトされている
-- `sys_del_dtq`: ID 範囲チェック・存在チェックなし
-- `sys_tsnd_dtq`, `sys_trcv_dtq`: ID 範囲チェック・存在チェックなし
+- `sys_trcv_dtq`: 送信待ちタスクからのデータ受け取りがコメントアウトされている (`#if 0` ブロック)
 - 排他制御は Big Kernel Lock (`kernel_lk`) により呼び出し元で保護されている (セマフォ・イベントフラグと同様)

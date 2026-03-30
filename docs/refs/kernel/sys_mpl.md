@@ -96,9 +96,17 @@ ER sys_acre_mpl(W apic, T_CMPL* pk_cmpl)
 | apic | W | APIC ID |
 | pk_cmpl | T_CMPL* | 生成情報パケット |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:**
+| 値 | 説明 |
+|------|------|
+| 正値 | 自動割り当てされたメモリプール ID |
+| E_NOID | 空き ID なし |
+| E_ID / E_OBJ | `sys_cre_mpl` 委譲時のエラー |
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:**
+1. ID 1 から `MAX_MPLID` まで順にスキャンし、`act == 0` の空きエントリを探す
+2. 見つかったら `sys_cre_mpl(apic, i, pk_cmpl)` に委譲して生成
+3. 生成成功なら割り当てた ID を返す。空きがなければ `E_NOID` を返す
 
 ---
 
@@ -148,11 +156,9 @@ ER sys_get_mpl(W apic, ID mplid, UINT blksz, VP* p_blk)
 | blksz | UINT | 要求ブロックサイズ (バイト) |
 | p_blk | VP* | 取得ブロックポインタ格納先 |
 
-**戻り値:** `sys_tget_mpl` の戻り値
+**戻り値:** `sys_tget_mpl(apic, mplid, blksz, p_blk, TMO_FEVR)` の戻り値
 
 **処理内容:** `sys_tget_mpl` に `TMO_FEVR` を指定して委譲する。
-
-**注意:** 現在の実装では `syscall(apic, mplid, blksz, p_blk, TMO_FEVR)` を呼び出しているが、これは `sys_tget_mpl` の呼び出しが意図されていると推測される。
 
 ---
 
@@ -172,9 +178,9 @@ ER sys_pget_mpl(W apic, ID mplid, UINT blksz, VP* p_blk)
 | blksz | UINT | 要求ブロックサイズ |
 | p_blk | VP* | 取得ブロックポインタ格納先 |
 
-**戻り値:** 未定義 (未実装)
+**戻り値:** `sys_tget_mpl(apic, mplid, blksz, p_blk, TMO_POL)` の戻り値
 
-**処理内容:** 未実装。関数本体が空。
+**処理内容:** `sys_tget_mpl` に `TMO_POL` (ポーリング) を指定して委譲する。
 
 ---
 
@@ -280,6 +286,5 @@ ER sys_ref_mpl(W apic, ID mplid, T_RMPL* pk_rmpl)
 
 - 固定長メモリプール (`sys_mpf`) との違い: 可変長プールは `pool_alloc` に任意のサイズを指定でき、異なるサイズの割り当て要求に対応できる。ただし、管理エントリ数に上限 (`MAX_MPL_POOL = 64`) がある。
 - `sys_rel_mpl` では `pool_free` でブロックをプールに返却してから、待ちタスクに再割り当てを試みる。固定長プールの `sys_rel_mpf` がブロックを直接渡す方式と異なり、可変長プールではサイズが異なるため `pool_alloc` を経由する必要がある。
-- `sys_get_mpl` の実装で `syscall()` を呼んでいるが、これは `sys_tget_mpl` への委譲が意図されていたと思われる (潜在的なバグ)。
-- `sys_pget_mpl`, `sys_acre_mpl` は未実装。
+- `sys_pget_mpl` は `sys_tget_mpl(TMO_POL)` に委譲する。`sys_acre_mpl` は空き ID を自動検索して `sys_cre_mpl` に委譲する。
 - `sys_ref_mpl` の空きサイズ関連フィールド (`fmplsz`, `fblksz`) は未実装。

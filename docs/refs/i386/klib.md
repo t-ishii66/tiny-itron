@@ -231,7 +231,7 @@ csti:
 
 **呼び出し元:** カーネル内の割り込み有効化が必要な箇所
 
-**注意点:** `sti` は特権命令であり、Ring 0 でのみ実行可能。Ring 3 (ユーザーモード) から呼び出すと一般保護例外 (#GP) が発生する。`main()` 内で直接 `csti()` を呼んではならない。割り込みの有効化は `start_first_task()` / `start_second_task()` の TSS ハードウェアタスクスイッチにより、TSS 内の EFLAGS (IF=1) をロードすることで行う。
+**注意点:** `sti` は特権命令であり、Ring 0 でのみ実行可能。Ring 3 (ユーザーモード) から呼び出すと一般保護例外 (#GP) が発生する。`main()` 内で直接 `csti()` を呼んではならない。割り込みの有効化は `start_first_task()` / `start_second_task()` が `RESTORE_ALL` + `iret` で偽 pt_regs フレームの EFLAGS (IF=1) をロードすることで行う。
 
 ### cltr
 
@@ -472,25 +472,31 @@ extern void start_first_task(void);
 
 ```asm
 start_first_task:
-    ljmp  $0x38, $0x3400
-    ret
+    movw    $0x38, %ax          /* SEL_TSS0 */
+    ltr     %ax                 /* Load Task Register (no register swap) */
+    movl    current_proc, %ebx  /* current_proc[0] = &proc[1] */
+    movl    (%ebx), %esp        /* ESP = proc[1].kern_esp */
+    ret                         /* -> intr_return_restore -> RESTORE_ALL -> iret */
 ```
 
-**概要:** CPU 0 (BSP) の最初のユーザータスクを TSS ハードウェアタスクスイッチで開始する。
+**概要:** CPU 0 (BSP) の最初のユーザータスクを開始する。
 
 **引数:** なし
 
-**戻り値:** 戻らない (タスクスイッチにより制御が移る)
+**戻り値:** 戻らない (`ret` で `intr_return_restore` にジャンプし、Ring 3 に遷移する)
 
-**処理内容:** `ljmp $0x38, $0x3400` を実行する。0x38 は `SEL_TSS0` (CPU 0 用 TSS セグメントセレクタ) であり、ハードウェアタスクスイッチが発生する。CPU は TSS0 に設定された EIP, ESP, EFLAGS, セグメントレジスタをロードしてタスク実行を開始する。
+**処理内容:**
 
-**呼び出し元:** `main()` 内の BSP 初期化完了後
+1. `ltr` で Task Register に `SEL_TSS0` (0x38) をロードする。これにより CPU が Ring 3→Ring 0 遷移時に TSS0 の esp0/ss0 を参照するようになる。`ltr` はレジスタの切り替えを行わない (TSS の内容はロードされない)
+2. `current_proc[0]` (= `&proc[1]`) から `kern_esp` を ESP にロードする
+3. `ret` が `kern_esp` 上の戻りアドレス (`intr_return_restore`) を pop し、`RESTORE_ALL` + `iret` で Ring 3 に遷移する
+
+**呼び出し元:** `smp_init()` (BSP 初期化の最終ステップ)
 
 **注意点:**
 
-- `ljmp` の第 2 オペランド `$0x3400` はセレクタ `0x38` が TSS を指すため無視される (TSS タスクスイッチではオフセットは使用されない)
-- TSS の EFLAGS に IF=1 が設定されているため、タスクスイッチ完了時に割り込みが有効化される。これが `main()` 内で `csti()` を呼んではならない理由である
-- `ljmp` 後の `ret` は到達しない (安全のための配置)
+- ハードウェアタスクスイッチ (`ljmp`) は使用しない。`ltr` + ESP ロード + `ret` によるソフトウェア遷移
+- `proc_create()` が構築した偽 pt_regs フレームの EFLAGS に IF=1 が設定されているため、`iret` 完了時に割り込みが有効化される。これが `main()` 内で `csti()` を呼んではならない理由である
 
 ### start_second_task
 
@@ -500,21 +506,24 @@ extern void start_second_task(void);
 
 ```asm
 start_second_task:
-    ljmp  $0x40, $0x3400
-    ret
+    movw    $0x40, %ax          /* SEL_TSS1 */
+    ltr     %ax                 /* Load Task Register */
+    movl    current_proc+4, %ebx  /* current_proc[1] = &proc[2] */
+    movl    (%ebx), %esp        /* ESP = proc[2].kern_esp */
+    ret                         /* -> intr_return_restore -> RESTORE_ALL -> iret */
 ```
 
-**概要:** CPU 1 (AP) の最初のユーザータスクを TSS ハードウェアタスクスイッチで開始する。
+**概要:** CPU 1 (AP) の最初のユーザータスクを開始する。
 
 **引数:** なし
 
-**戻り値:** 戻らない (タスクスイッチにより制御が移る)
+**戻り値:** 戻らない (`ret` で `intr_return_restore` にジャンプし、Ring 3 に遷移する)
 
-**処理内容:** `ljmp $0x40, $0x3400` を実行する。0x40 は `SEL_TSS1` (CPU 1 用 TSS セグメントセレクタ) であり、ハードウェアタスクスイッチが発生する。
+**処理内容:** `start_first_task()` と同じパターン。`SEL_TSS1` (0x40) を Task Register にロードし、`current_proc[1]` (= `&proc[2]`) の `kern_esp` を ESP にロードして `ret` する。
 
-**呼び出し元:** `main()` 内の AP 初期化完了後 (`smp_ap_init()` 内)
+**呼び出し元:** `smp_ap_init()` (AP 初期化の最終ステップ)
 
-**注意点:** `start_first_task()` と同様、`ljmp` 後の `ret` は到達しない。CPU 1 のタスクは Ring 3 で実行される。Ring 0 で直接 `second_task()` を呼ぶと `save`/`restore` のスタックフレーム想定 (Ring 3→Ring 0 遷移) と合わないため、必ず TSS ハードウェアタスクスイッチを使用する必要がある。
+**注意点:** Ring 0 で直接 `second_task()` を呼ぶと、SAVE_ALL が Ring 3→Ring 0 遷移を前提とした 14 ワードの pt_regs フレームを想定するが、Ring 0→Ring 0 では SS/ESP が push されずフレームが 2 ワード不足するため、必ず `ltr` + `ret` → `iret` で Ring 3 に遷移する必要がある。
 
 ### syscall
 

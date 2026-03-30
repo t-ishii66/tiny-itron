@@ -180,7 +180,7 @@ static void setup_trap(void)
 **呼び出し元:** `idt_init()`
 
 **注意点:**
-- ハンドラ関数名 (`intr_*`) はアセンブリ側 (`intr.s`) で定義されたエントリポイント。C 言語ハンドラ (`c_intr_*`) を呼び出す前に `save` マクロでレジスタを保存する。
+- ハンドラ関数名 (`intr_*`) はアセンブリ側 (`intr.s`) で定義されたエントリポイント。C 言語ハンドラ (`c_intr_*`) を呼び出す前に `SAVE_ALL` マクロでレジスタを保存する。
 - ベクタ 0, 13, 14 は `GT_INTR` (割り込みゲート) を使用する。割り込みゲートはエントリ時に自動的に IF=0 にするため、ハンドラ実行中にネスト割り込みが発生しない。
 
 ---
@@ -249,12 +249,14 @@ void c_intr_irq0(void)
 
 **処理内容:**
 
-1. `timer_intr(0, 1)` を呼び出す (CPU 0、ティック数 1)
-2. `i8259_reenable()` で PIC の EOI を送信
+1. `smp_lock(&kernel_lk)` で Big Kernel Lock を取得
+2. `timer_intr(0, 1)` を呼び出す (CPU 0、ティック数 1)
+3. `i8259_reenable()` で PIC の EOI を送信
+4. `smp_unlock(&kernel_lk)` でロック解放
 
 **呼び出し元:** `intr_irq0` (アセンブリ側エントリから)
 
-**注意点:** PIT タイマーは CPU 0 のみに配送される (PIC 経由)。
+**注意点:** PIT タイマーは CPU 0 のみに配送される (PIC 経由)。`kernel_lk` の保持により、`timer_intr` 内の `sched_timeout` やカーネルデータ操作が保護される。
 
 ---
 
@@ -272,43 +274,40 @@ void c_intr_irq1(void)
 
 **処理内容:**
 
-1. `key_intr()` を呼び出す (スキャンコード読み取り、ASCII 変換、`ipsnd_dtq` で DTQ 送信)
-2. `i8259_reenable()` で PIC の EOI を送信
+1. `smp_lock(&kernel_lk)` で Big Kernel Lock を取得
+2. `key_intr()` を呼び出す (スキャンコード読み取り、ASCII 変換、`ipsnd_dtq` で DTQ 送信)
+3. `i8259_reenable()` で PIC の EOI を送信
+4. `smp_unlock(&kernel_lk)` でロック解放
 
 **呼び出し元:** `intr_irq1` (アセンブリ側エントリから)
 
-**注意点:** IRQ1 は CPU 0 に配送される。`ipsnd_dtq` 内の `sched_next_tsk` が両 CPU の `next_tsk_flag` をセットし、CPU 1 の APIC タイマー割り込みで kbd_task が起床される。
+**注意点:** IRQ1 は CPU 0 に配送される。`ipsnd_dtq` 内の `sched_next_tsk` が両 CPU の `next_tsk_flag` をセットし、CPU 1 の APIC タイマー割り込みで kbd_task が起床される。`kernel_lk` の保持により、`key_intr` 内の DTQ 操作やスケジューラ操作が保護される。
 
 ---
 
 ### c_intr_general
 
 ```c
-void c_intr_general(W apic, W esp)
+void c_intr_general(void)
 ```
 
 **概要:** 一般保護例外 (#GP, ベクタ 13) の C 言語ハンドラ。診断情報を出力して停止する。
 
-**引数:**
-
-| 引数 | 型 | 説明 |
-|------|----|------|
-| `apic` | `W` | CPU 番号 (APIC ID、0 or 1) |
-| `esp` | `W` | save 後の ESP 値 |
+**引数:** なし
 
 **戻り値:** なし (関数は復帰しない、`hlt` で停止)
 
 **処理内容:**
 
-1. `gp_error_code` グローバル変数からエラーコードを取得する (アセンブリ側で保存済み)
-2. `proc->stack - 52` から save フレームを取得し、EIP (オフセット 3)、ESP (オフセット 2)、CS (オフセット 0) を読み出す
-3. `printk` でエラーコード、EIP、ESP、APIC ID を表示する
-4. APIC ID レジスタ (0xFEE00020) の内容を表示する
+1. APIC ID レジスタ (`0xFEE00020`) を読み取り、CPU 番号 (0 or 1) を判定する
+2. `current_proc[apic]` からプロセス構造体を取得し、`kern_stack_top - sizeof(struct pt_regs)` で pt_regs フレームのアドレスを計算する
+3. `gp_error_code` グローバル変数からエラーコードを取得する (アセンブリ側で保存済み)
+4. `printk` で `gp_error_code`、`regs->eip`、`regs->esp`、`regs->cs`、CPU 番号を表示する
 5. `hlt` ループで停止する
 
 **呼び出し元:** `intr_general` (アセンブリ側エントリから)
 
-**注意点:** `intr_general` はエントリ時にエラーコードを `gp_error_code` に保存してからスタック上のエラーコードを破棄 (`addl $4, %esp`) した後に `save` を呼ぶ。
+**注意点:** `intr_general` はエントリ時にエラーコードを `gp_error_code` に保存してからスタック上のエラーコードを破棄 (`addl $4, %esp`) した後に `SAVE_ALL` を実行する。
 
 ---
 
@@ -553,9 +552,9 @@ void irq_enter(void)
 2. `timer_return[apic] = 1` でタイマー割り込み抑制フラグをセット
 3. `irq_mask_on(0xfffe)` で IRQ1-7 をマスク (IRQ0 以外のマスター PIC IRQ を無効化)
 
-**呼び出し元:** キーボード IRQ 処理の前処理として使用
+**呼び出し元:** 現在は未使用。旧アーキテクチャでキーボード IRQ 処理の前処理に使用されていた。
 
-**注意点:** `0xfffe` は bit 0 (IRQ0) 以外のマスター PIC 全 IRQ をマスクする。
+**注意点:** `0xfffe` は bit 0 (IRQ0) 以外のマスター PIC 全 IRQ をマスクする。現在の `intr_irq1` は標準的な割り込みハンドラパターン (SAVE_ALL → intr_enter → C ハンドラ → jmp intr_return) を使用しており、`irq_enter()`/`irq_exit()` は呼び出さない。
 
 ---
 
@@ -577,7 +576,7 @@ void irq_exit(void)
 2. `timer_return[apic] = 0` でタイマー割り込み抑制フラグをクリア
 3. `irq_mask_off(0xfffe)` でマスクを解除
 
-**呼び出し元:** キーボード IRQ 処理の後処理として使用
+**呼び出し元:** 現在は未使用。`irq_enter()` と対で使用される。
 
 **注意点:** `irq_enter()` と対で使用する。
 
@@ -606,10 +605,11 @@ void stack_adjust(W apic, void (*func)(), TEXPTN texptn, VP_INT exinf)
 
 1. `get_apic_index()` で CPU インデックスを取得
 2. `current_proc[idx]` からプロセス構造体を取得
-3. プロセスの `reg[ESP]` からスタックポインタを取得
-4. 現在のレジスタ値 (EIP, EAX, EBX, ECX, EDX, ESI, EDI, EFLAGS) をスタックにプッシュ
-5. `exinf`, `texptn`, `user_restore` のアドレスをスタックにプッシュ
-6. `reg[ESP]` と `reg[EIP]` を更新 (EIP は `func` のアドレスに設定)
+3. `kern_stack_top - sizeof(struct pt_regs)` で pt_regs フレームのアドレスを計算
+4. `regs->esp` からユーザースタックポインタを取得
+5. 現在のレジスタ値 (EIP, EAX, EBX, ECX, EDX, ESI, EDI, EFLAGS) をユーザースタックにプッシュ
+6. `exinf`, `texptn`, `user_restore` のアドレスをユーザースタックにプッシュ
+7. `regs->esp` と `regs->eip` を更新 (EIP は `func` のアドレスに設定)
 
 **呼び出し元:** タスク例外処理機構
 
@@ -643,10 +643,10 @@ int sched_next_tsk_check(int apic)
 4. `current_proc[apic]` が変更されたか (旧プロセスと異なるか) を確認
 5. 変更された場合は 1 を返す (呼び出し元でコンテキストスイッチを行う)
 
-**呼び出し元:** `intr.s` (割り込みハンドラの `restore` マクロから)
+**呼び出し元:** `intr_leave` (intr.s)
 
 **注意点:**
-- この関数の戻り値により、`intr.s` の `restore` マクロが別プロセスの `save` フレームから復帰するか、同じプロセスに戻るかを決定する。
+- この関数の戻り値により、`intr_leave` が別タスクの per-task カーネルスタックに ESP をスワップするか、同じタスクに戻るかを決定する。
 - `next_tsk_flag` は `sched_next_tsk()` によってセットされる。
 
 ## 補足

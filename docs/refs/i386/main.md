@@ -51,7 +51,6 @@ int main(void)
    - `itron_init()` -- ITRON カーネル初期化 (タスク管理構造体、メモリプール、スケジューラ)
    - `proc_init()` -- プロセス構造体初期化、タスク 1/2/5/6 の生成
    - `tss_init()` -- TSS (Task State Segment) 初期化 (両 CPU 分)
-   - `cltr(SEL_TSS_DUMMY0)` -- CPU 0 の TR レジスタに dummy TSS をロード
    - `cpu_num = 1` -- AP が `main()` に入った時に AP パスに分岐するよう設定
    - `smp_init()` -- SMP 初期化 (APIC 設定、SIPI 送信、タスク起動)
 3. `cpu_num != 0` (AP) の場合:
@@ -62,7 +61,7 @@ int main(void)
 
 **注意点:**
 - `itron_init()` は `proc_init()` より前に呼ぶ必要がある。逆順だと `tsk_init()` がタスク状態をゼロクリアしてしまい、`proc_init()` で設定した状態が失われる。
-- `main()` 内で `csti()` を呼んではいけない。割り込み有効化は `start_first_task()` / `start_second_task()` の TSS スイッチで EFLAGS の IF=1 をロードすることで行う。
+- `main()` 内で `csti()` を呼んではいけない。割り込み有効化は `start_first_task()` / `start_second_task()` が `RESTORE_ALL` + `iret` で偽 pt_regs フレームの EFLAGS (IF=1) をロードすることで行う。
 - `cpu_num` はグローバル変数であり、BSP が `cpu_num = 1` に設定した後に AP が `main()` に到達するシーケンスに依存している。
 
 ---

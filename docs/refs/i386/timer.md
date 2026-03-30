@@ -95,7 +95,9 @@ void timer_intr(unsigned char apic, unsigned long delta);
 
 1. `apic == 0` (CPU 0) の場合:
    - `timer_ticks` をインクリメント
+   - `timer_ticks >= 1000000000UL` の場合、0 にリセット (オーバーフロー防止のラップアラウンド)
    - `vga_write_dec_at(3, 21, timer_ticks, 10, 0x0B)` でVGA 画面の行 3、列 21 にティック値を緑色 (属性 0x0B) で 10 桁幅表示
+   - `sys_isig_tim(0)` を呼び出してシステム時刻を TIC_NUME (~17ms) 分進める
 2. 全 CPU 共通: `sched_timeout(apic, delta)` を呼び出してスケジューラのタイムアウト処理を実行
 
 **呼び出し元:**
@@ -146,10 +148,10 @@ void timer_start(void);
 
 1. `irq_mask_off(1)` を呼び出して IRQ0 のマスクを解除する
 
-**呼び出し元:** `smp_ap_init()` (`i386/smp.c`) -- AP (CPU 1) の初期化完了後に呼び出される
+**呼び出し元:** `smp_init()` (`i386/smp.c`) -- BSP が AP の起動完了を確認した後に呼び出される
 
 **注意点:**
-- タイマーの開始は `smp_ap_init()` 内で `key_start()` と共に呼び出される。これは AP の初期化が完了するまで PIT 割り込みを遅延させるためである。
+- タイマーの開始は `smp_init()` 内で `key_start()` と共に呼び出される。これは AP の初期化が完了するまで PIT 割り込みを遅延させるためである。
 - `irq_mask_off()` の引数はビットマスクであり、ビット 0 が IRQ0 に対応する。引数 `1` は IRQ0 のアンマスクを意味する。
 
 ## 補足
