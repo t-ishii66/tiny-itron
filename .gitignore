@@ -1,0 +1,29 @@
+# Object files and static libraries
+*.o
+*.a
+a.out
+
+# Build artifacts - i386
+i386/genasm
+i386/elf
+i386/table.s
+i386/table
+i386/start
+i386/boot/boot
+i386/smpmain
+i386/_smpmain
+i386/smpi386
+
+# Build artifacts - test_tool
+i386/test_tool/s
+i386/test_tool/s2
+
+# Build artifacts - boot-old
+boot-old/mktable
+boot-old/build
+boot-old/2nd/build_boot2_elf
+boot-old/2nd/start16
+boot-old/1st/1stboot
+
+# CVS directories
+CVS/

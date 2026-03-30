@@ -1,0 +1,374 @@
+sys_tsk.c: In function `sys_acre_tsk':
+sys_tsk.c:80: warning: implicit declaration of function `cre_tsk'
+sys_sns.c: In function `sys_loc_cpu':
+sys_sns.c:17: warning: implicit declaration of function `cpu_lock'
+sys_sns.c:15: warning: unused variable `lk'
+sys_sns.c: In function `sys_unl_cpu':
+sys_sns.c:48: warning: implicit declaration of function `cpu_unlock'
+sys_sns.c:50: warning: control reaches end of non-void function
+sys_tex.c: In function `sys_ena_tex':
+sys_tex.c:81: warning: implicit declaration of function `stack_adjust'
+sys_tex.c: In function `sys_ref_tex':
+sys_tex.c:113: warning: control reaches end of non-void function
+In file included from syscall.c:30:
+syscallP.h:15: warning: missing braces around initializer for `syscall_entry[0]'
+syscallP.h:251: warning: missing braces around initializer for `syscall_tcpip_entry[0]'
+syscall.c: In function `sys_dummy':
+syscall.c:54: warning: control reaches end of non-void function
+sched.c: In function `sched_ins':
+sched.c:44: warning: implicit declaration of function `smp_lock'
+sched.c:55: warning: implicit declaration of function `smp_unlock'
+user.c: In function `first_task':
+user.c:21: warning: implicit declaration of function `stack_alloc'
+user.c:21: warning: assignment makes pointer from integer without a cast
+user.c:25: warning: implicit declaration of function `cre_tsk'
+user.c:26: warning: implicit declaration of function `act_tsk'
+user.c:28: warning: implicit declaration of function `slp_tsk'
+user.c:35: warning: implicit declaration of function `wup_tsk'
+user.c:16: warning: unused variable `esp'
+user.c:15: warning: unused variable `ss'
+user.c:14: warning: unused variable `cs'
+user.c: In function `second_task':
+user.c:48: warning: assignment makes pointer from integer without a cast
+user.c: In function `task0001':
+user.c:76: warning: implicit declaration of function `get_esp'
+user.c: In function `pre_usr_main':
+user.c:88: warning: implicit declaration of function `network'
+user.c: In function `usr_main':
+user.c:122: warning: implicit declaration of function `cre_flg'
+user.c:127: warning: implicit declaration of function `tcp_cre_rep'
+user.c:129: warning: implicit declaration of function `mem_alloc'
+user.c:129: warning: assignment makes pointer from integer without a cast
+user.c:131: warning: assignment makes pointer from integer without a cast
+user.c:134: warning: implicit declaration of function `tcp_cre_cep'
+user.c:145: warning: implicit declaration of function `tcp_con_cep'
+user.c:147: warning: implicit declaration of function `tcp_snd_dat'
+user.c:148: warning: implicit declaration of function `tcp_rcv_dat'
+user.c:164: warning: implicit declaration of function `printf'
+user.c:114: warning: unused variable `pf'
+user.c: In function `usr_main2':
+user.c:188: warning: implicit declaration of function `set_flg'
+user.c:180: warning: unused variable `tex'
+user.c: In function `check_seg':
+user.c:209: warning: implicit declaration of function `get_cs'
+user.c:210: warning: implicit declaration of function `get_ds'
+user.c:211: warning: implicit declaration of function `get_ss'
+user.c:213: warning: implicit declaration of function `get_eflags'
+sys_sem.c: In function `sys_cre_sem':
+sys_sem.c:29: warning: implicit declaration of function `smp_lock'
+sys_sem.c:31: warning: implicit declaration of function `smp_unlock'
+sys_flg.c: In function `sys_cre_flg':
+sys_flg.c:30: warning: implicit declaration of function `smp_lock'
+sys_flg.c:32: warning: implicit declaration of function `smp_unlock'
+sys_dtq.c: In function `sys_cre_dtq':
+sys_dtq.c:36: warning: implicit declaration of function `mem_alloc'
+sys_dtq.c:36: warning: assignment makes pointer from integer without a cast
+sys_dtq.c: In function `sys_acre_dtq':
+sys_dtq.c:48: warning: control reaches end of non-void function
+sys_dtq.c: In function `sys_del_dtq':
+sys_dtq.c:57: warning: implicit declaration of function `mem_free'
+sys_dtq.c:64: warning: implicit declaration of function `sched_ins'
+sys_dtq.c: In function `sys_snd_dtq':
+sys_dtq.c:90: warning: implicit declaration of function `sys_tsnd_dtq'
+sys_dtq.c: In function `sys_psnd_dtq':
+sys_dtq.c:108: warning: implicit declaration of function `wlink_rem'
+sys_dtq.c: In function `ipsnd_dtq':
+sys_dtq.c:148: warning: implicit declaration of function `sched_next_tsk'
+sys_dtq.c: In function `sys_tsnd_dtq':
+sys_dtq.c:190: warning: implicit declaration of function `ins_fifo'
+sys_dtq.c:193: warning: implicit declaration of function `ins_pri'
+sys_dtq.c:198: warning: implicit declaration of function `sys_slp_tsk'
+sys_dtq.c:200: warning: implicit declaration of function `sys_tslp_tsk'
+sys_dtq.c: In function `sys_ifsnd_dtq':
+sys_dtq.c:246: warning: control reaches end of non-void function
+sys_dtq.c: In function `sys_rcv_dtq':
+sys_dtq.c:252: warning: implicit declaration of function `sys_trcv_dtq'
+sys_dtq.c: In function `sys_prcv_dtq':
+sys_dtq.c:258: warning: control reaches end of non-void function
+sys_dtq.c: In function `sys_trcv_dtq':
+sys_dtq.c:265: warning: unused variable `t'
+sys_dtq.c:264: warning: unused variable `wlink'
+sys_dtq.c: In function `sys_ref_dtq':
+sys_dtq.c:295: warning: control reaches end of non-void function
+sys_mbx.c: In function `sys_cre_mbx':
+sys_mbx.c:34: warning: implicit declaration of function `mem_alloc'
+sys_mbx.c:35: warning: assignment makes pointer from integer without a cast
+sys_mbx.c: In function `sys_acre_mbx':
+sys_mbx.c:50: warning: control reaches end of non-void function
+sys_mbx.c: In function `sys_del_mbx':
+sys_mbx.c:64: warning: implicit declaration of function `mem_free'
+sys_mbx.c:56: warning: unused variable `wlink'
+sys_mbx.c: In function `sys_snd_mbx':
+sys_mbx.c:90: warning: implicit declaration of function `sched_ins'
+sys_mbx.c:91: warning: implicit declaration of function `wlink_rem'
+sys_mbx.c:94: warning: implicit declaration of function `mbx_ins'
+sys_mbx.c:76: warning: unused variable `m'
+sys_mbx.c: In function `sys_rcv_mbx':
+sys_mbx.c:107: warning: implicit declaration of function `sys_trcv_mbx'
+sys_mbx.c: In function `sys_prcv_mbx':
+sys_mbx.c:124: warning: assignment makes pointer from integer without a cast
+sys_mbx.c:125: warning: implicit declaration of function `mbx_rem'
+sys_mbx.c:114: warning: unused variable `pri'
+sys_mbx.c: In function `sys_trcv_mbx':
+sys_mbx.c:147: warning: assignment makes pointer from integer without a cast
+sys_mbx.c:158: warning: implicit declaration of function `ins_fifo'
+sys_mbx.c:160: warning: implicit declaration of function `ins_pri'
+sys_mbx.c:163: warning: implicit declaration of function `sys_slp_tsk'
+sys_mbx.c:165: warning: implicit declaration of function `sys_tslp_tsk'
+sys_mbx.c:137: warning: unused variable `pri'
+sys_mbx.c: In function `sys_ref_mbx':
+sys_mbx.c:190: warning: assignment makes pointer from integer without a cast
+sys_mbx.c: At top level:
+sys_mbx.c:202: warning: type mismatch with previous external decl
+sys_mbx.c:94: warning: previous external decl of `mbx_ins'
+sys_mbx.c:202: warning: type mismatch with previous implicit declaration
+sys_mbx.c:97: warning: previous implicit declaration of `mbx_ins'
+sys_mbx.c:202: warning: `mbx_ins' was previously implicitly declared to return `int'
+sys_mbx.c: In function `mbx_ins':
+sys_mbx.c:204: warning: assignment makes pointer from integer without a cast
+sys_mbx.c:206: warning: assignment makes integer from pointer without a cast
+sys_mbx.c:210: warning: assignment makes pointer from integer without a cast
+sys_mbx.c:211: warning: assignment makes integer from pointer without a cast
+sys_mbx.c: At top level:
+sys_mbx.c:219: warning: type mismatch with previous external decl
+sys_mbx.c:125: warning: previous external decl of `mbx_rem'
+sys_mbx.c:219: warning: type mismatch with previous implicit declaration
+sys_mbx.c:148: warning: previous implicit declaration of `mbx_rem'
+sys_mbx.c:219: warning: `mbx_rem' was previously implicitly declared to return `int'
+sys_mbx.c: In function `mbx_rem':
+sys_mbx.c:223: warning: assignment makes pointer from integer without a cast
+sys_mbx.c:224: warning: assignment makes integer from pointer without a cast
+sys_mtx.c: In function `sys_cre_mtx':
+sys_mtx.c:32: warning: control reaches end of non-void function
+sys_mtx.c: In function `sys_acre_mtx':
+sys_mtx.c:38: warning: control reaches end of non-void function
+sys_mtx.c: In function `sys_del_mtx':
+sys_mtx.c:58: warning: implicit declaration of function `sched_ins'
+sys_mtx.c: In function `sys_loc_mtx':
+sys_mtx.c:69: warning: implicit declaration of function `sys_tloc_mtx'
+sys_mtx.c: In function `sys_ploc_mtx':
+sys_mtx.c:76: warning: control reaches end of non-void function
+sys_mtx.c: In function `sys_tloc_mtx':
+sys_mtx.c:103: warning: implicit declaration of function `ins_fifo'
+sys_mtx.c:105: warning: implicit declaration of function `ins_pri'
+sys_mtx.c:111: warning: implicit declaration of function `sched_rem'
+sys_mtx.c:115: warning: implicit declaration of function `sys_slp_tsk'
+sys_mtx.c:117: warning: implicit declaration of function `sys_tslp_tsk'
+sys_mtx.c: In function `sys_unl_mtx':
+sys_mtx.c:141: warning: implicit declaration of function `wlink_rem'
+sys_mtx.c: In function `sys_ref_mtx':
+sys_mtx.c:171: warning: comparison of distinct pointer types lacks a cast
+sys_mbf.c: In function `sys_cre_mbf':
+sys_mbf.c:39: warning: implicit declaration of function `mem_alloc'
+sys_mbf.c:39: warning: assignment makes pointer from integer without a cast
+sys_mbf.c: In function `sys_acre_mbf':
+sys_mbf.c:67: warning: control reaches end of non-void function
+sys_mbf.c: In function `sys_del_mbf':
+sys_mbf.c:85: warning: implicit declaration of function `sched_ins'
+sys_mbf.c:99: warning: implicit declaration of function `mem_free'
+sys_mbf.c: In function `sys_snd_mbf':
+sys_mbf.c:112: warning: implicit declaration of function `sys_tsnd_mbf'
+sys_mbf.c: In function `sys_psnd_mbf':
+sys_mbf.c:119: warning: control reaches end of non-void function
+sys_mbf.c: In function `sys_tsnd_mbf':
+sys_mbf.c:135: warning: implicit declaration of function `bcopy'
+sys_mbf.c:137: warning: implicit declaration of function `wlink_rem'
+sys_mbf.c:146: warning: implicit declaration of function `ins_fifo'
+sys_mbf.c:148: warning: implicit declaration of function `ins_pri'
+sys_mbf.c:152: warning: implicit declaration of function `mbf_rest'
+sys_mbf.c:153: warning: implicit declaration of function `mbf_put'
+sys_mbf.c:158: warning: implicit declaration of function `sys_slp_tsk'
+sys_mbf.c:160: warning: implicit declaration of function `sys_tslp_tsk'
+sys_mbf.c: In function `sys_rcv_mbf':
+sys_mbf.c:170: warning: implicit declaration of function `sys_trcv_mbf'
+sys_mbf.c: In function `sys_prcv_mbf':
+sys_mbf.c:177: warning: control reaches end of non-void function
+sys_mbf.c: At top level:
+sys_mbf.c:182: warning: type mismatch with previous external decl
+sys_mbf.c:170: warning: previous external decl of `sys_trcv_mbf'
+sys_mbf.c:182: warning: type mismatch with previous implicit declaration
+sys_mbf.c:170: warning: previous implicit declaration of `sys_trcv_mbf'
+sys_mbf.c:182: warning: `sys_trcv_mbf' was previously implicitly declared to return `int'
+sys_mbf.c: In function `sys_trcv_mbf':
+sys_mbf.c:191: warning: implicit declaration of function `mbf_check'
+sys_mbf.c:192: warning: implicit declaration of function `mbf_get'
+sys_mbf.c:193: warning: implicit declaration of function `mbf_snd_check'
+sys_mbf.c:184: warning: unused variable `t'
+sys_mbf.c:183: warning: unused variable `wlink'
+sys_mbf.c: At top level:
+sys_mbf.c:248: warning: type mismatch with previous external decl
+sys_mbf.c:193: warning: previous external decl of `mbf_snd_check'
+sys_mbf.c:248: warning: type mismatch with previous implicit declaration
+sys_mbf.c:193: warning: previous implicit declaration of `mbf_snd_check'
+sys_mbf.c:248: warning: `mbf_snd_check' was previously implicitly declared to return `int'
+sys_mbf.c:295: warning: type mismatch with previous external decl
+sys_mbf.c:152: warning: previous external decl of `mbf_rest'
+sys_mbf.c:295: warning: type mismatch with previous implicit declaration
+sys_mbf.c:255: warning: previous implicit declaration of `mbf_rest'
+sys_mbf.c:295: warning: `mbf_rest' was previously implicitly declared to return `int'
+sys_mbf.c:313: warning: type mismatch with previous external decl
+sys_mbf.c:191: warning: previous external decl of `mbf_check'
+sys_mbf.c:313: warning: type mismatch with previous implicit declaration
+sys_mbf.c:279: warning: previous implicit declaration of `mbf_check'
+sys_mbf.c:313: warning: `mbf_check' was previously implicitly declared to return `int'
+sys_mbf.c:322: warning: type mismatch with previous external decl
+sys_mbf.c:153: warning: previous external decl of `mbf_put'
+sys_mbf.c:322: warning: type mismatch with previous implicit declaration
+sys_mbf.c:256: warning: previous implicit declaration of `mbf_put'
+sys_mbf.c:322: warning: `mbf_put' was previously implicitly declared to return `int'
+sys_mbf.c:332: warning: type mismatch with previous external decl
+sys_mbf.c:192: warning: previous external decl of `mbf_get'
+sys_mbf.c:332: warning: type mismatch with previous implicit declaration
+sys_mbf.c:280: warning: previous implicit declaration of `mbf_get'
+sys_mbf.c:332: warning: `mbf_get' was previously implicitly declared to return `int'
+sys_mbf.c: In function `mbf_get':
+sys_mbf.c:334: warning: implicit declaration of function `mbf_do_get'
+sys_mbf.c: In function `mbf_do_put':
+sys_mbf.c:347: warning: unused variable `size'
+sys_mbf.c:346: warning: unused variable `p'
+sys_mbf.c: At top level:
+sys_mbf.c:379: warning: type mismatch with previous external decl
+sys_mbf.c:334: warning: previous external decl of `mbf_do_get'
+sys_mbf.c:379: warning: type mismatch with previous implicit declaration
+sys_mbf.c:334: warning: previous implicit declaration of `mbf_do_get'
+sys_mbf.c:379: warning: `mbf_do_get' was previously implicitly declared to return `int'
+sys_mbf.c: In function `mbf_do_get':
+sys_mbf.c:381: warning: unused variable `size'
+sys_mbf.c:380: warning: unused variable `p'
+sys_por.c: In function `sys_acre_por':
+sys_por.c:43: warning: control reaches end of non-void function
+sys_por.c: In function `sys_del_por':
+sys_por.c:61: warning: implicit declaration of function `sched_ins'
+sys_por.c: In function `sys_cal_por':
+sys_por.c:84: warning: implicit declaration of function `sys_tcal_por'
+sys_por.c: At top level:
+sys_por.c:91: warning: type mismatch with previous external decl
+sys_por.c:84: warning: previous external decl of `sys_tcal_por'
+sys_por.c:91: warning: type mismatch with previous implicit declaration
+sys_por.c:84: warning: previous implicit declaration of `sys_tcal_por'
+sys_por.c:91: warning: `sys_tcal_por' was previously implicitly declared to return `int'
+sys_por.c: In function `sys_tcal_por':
+sys_por.c:104: warning: implicit declaration of function `wlink_rem'
+sys_por.c:106: warning: implicit declaration of function `sched_rem'
+sys_por.c:108: warning: implicit declaration of function `bcopy'
+sys_por.c:114: warning: suggest parentheses around arithmetic in operand of |
+sys_por.c:118: warning: implicit declaration of function `sched_next_tsk'
+sys_por.c:126: warning: implicit declaration of function `ins_fifo'
+sys_por.c:128: warning: implicit declaration of function `ins_pri'
+sys_por.c:135: warning: implicit declaration of function `sys_slp_tsk'
+sys_por.c:137: warning: implicit declaration of function `sys_tslp_tsk'
+sys_por.c:94: warning: unused variable `i'
+sys_por.c: In function `sys_acp_por':
+sys_por.c:147: warning: implicit declaration of function `sys_tacp_por'
+sys_por.c: In function `sys_pacp_por':
+sys_por.c:154: warning: control reaches end of non-void function
+sys_por.c: At top level:
+sys_por.c:160: warning: type mismatch with previous external decl
+sys_por.c:147: warning: previous external decl of `sys_tacp_por'
+sys_por.c:160: warning: type mismatch with previous implicit declaration
+sys_por.c:147: warning: previous implicit declaration of `sys_tacp_por'
+sys_por.c:160: warning: `sys_tacp_por' was previously implicitly declared to return `int'
+sys_por.c: In function `sys_tacp_por':
+sys_por.c:178: warning: suggest parentheses around arithmetic in operand of |
+sys_por.c: In function `sys_fwd_por':
+sys_por.c:205: warning: unused variable `wlink'
+sys_mpf.c: In function `sys_cre_mpf':
+sys_mpf.c:35: warning: implicit declaration of function `mem_alloc'
+sys_mpf.c:36: warning: assignment makes pointer from integer without a cast
+sys_mpf.c:41: warning: assignment makes pointer from integer without a cast
+sys_mpf.c:42: warning: implicit declaration of function `pool_init'
+sys_mpf.c: In function `sys_acre_mpf':
+sys_mpf.c:53: warning: control reaches end of non-void function
+sys_mpf.c: In function `sys_del_mpf':
+sys_mpf.c:71: warning: implicit declaration of function `sched_ins'
+sys_mpf.c:75: warning: implicit declaration of function `mem_free'
+sys_mpf.c: In function `sys_get_mpf':
+sys_mpf.c:88: warning: implicit declaration of function `sys_tget_mpf'
+sys_mpf.c: In function `sys_pget_mpf':
+sys_mpf.c:95: warning: control reaches end of non-void function
+sys_mpf.c: In function `sys_tget_mpf':
+sys_mpf.c:105: warning: implicit declaration of function `pool_alloc'
+sys_mpf.c:105: warning: assignment makes pointer from integer without a cast
+sys_mpf.c:115: warning: implicit declaration of function `ins_fifo'
+sys_mpf.c:117: warning: implicit declaration of function `ins_pri'
+sys_mpf.c:121: warning: implicit declaration of function `sys_slp_tsk'
+sys_mpf.c: In function `sys_rel_mpf':
+sys_mpf.c:142: warning: implicit declaration of function `wlink_rem'
+sys_mpf.c:148: warning: implicit declaration of function `pool_free'
+sys_mpl.c: In function `sys_cre_mpl':
+sys_mpl.c:35: warning: implicit declaration of function `mem_alloc'
+sys_mpl.c:35: warning: assignment makes pointer from integer without a cast
+sys_mpl.c:40: warning: assignment makes pointer from integer without a cast
+sys_mpl.c:41: warning: implicit declaration of function `pool_init'
+sys_mpl.c: In function `sys_acre_mpl':
+sys_mpl.c:51: warning: control reaches end of non-void function
+sys_mpl.c: In function `sys_del_mpl':
+sys_mpl.c:69: warning: implicit declaration of function `sched_ins'
+sys_mpl.c:74: warning: implicit declaration of function `mem_free'
+sys_mpl.c: In function `sys_get_mpl':
+sys_mpl.c:86: warning: implicit declaration of function `syscall'
+sys_mpl.c: In function `sys_pget_mpl':
+sys_mpl.c:93: warning: control reaches end of non-void function
+sys_mpl.c: In function `sys_tget_mpl':
+sys_mpl.c:106: warning: implicit declaration of function `pool_alloc'
+sys_mpl.c:106: warning: assignment makes pointer from integer without a cast
+sys_mpl.c:114: warning: implicit declaration of function `ins_fifo'
+sys_mpl.c:116: warning: implicit declaration of function `ins_pri'
+sys_mpl.c:121: warning: implicit declaration of function `sys_slp_tsk'
+sys_mpl.c:123: warning: implicit declaration of function `sys_tslp_tsk'
+sys_mpl.c:100: warning: unused variable `t'
+sys_mpl.c:99: warning: unused variable `wlink'
+sys_mpl.c: In function `sys_rel_mpl':
+sys_mpl.c:139: warning: implicit declaration of function `pool_free'
+sys_mpl.c:143: warning: assignment makes pointer from integer without a cast
+sys_mpl.c:148: warning: implicit declaration of function `wlink_rem'
+sys_tim.c: In function `sys_isig_tim':
+sys_tim.c:39: warning: control reaches end of non-void function
+sys_cyc.c: In function `sys_acre_cyc':
+sys_cyc.c:44: warning: control reaches end of non-void function
+sys_alm.c: In function `sys_acre_alm':
+sys_alm.c:39: warning: control reaches end of non-void function
+sys_alm.c: In function `alm_intr':
+sys_alm.c:113: warning: `return' with a value, in function returning void
+sys_ovr.c: In function `ovr_intr':
+sys_ovr.c:76: warning: `return' with a value, in function returning void
+sys_rdq.c: In function `sys_irot_rdq':
+sys_rdq.c:26: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_iget_tid':
+sys_rdq.c:40: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_loc_cpu':
+sys_rdq.c:46: warning: implicit declaration of function `ccli'
+sys_rdq.c:54: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_iloc_cpu':
+sys_rdq.c:60: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_unl_cpu':
+sys_rdq.c:70: warning: implicit declaration of function `csti'
+sys_rdq.c:71: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_iunl_cpu':
+sys_rdq.c:77: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_dis_dsp':
+sys_rdq.c:84: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_ena_dsp':
+sys_rdq.c:91: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_sns_ctx':
+sys_rdq.c:97: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_sns_dpn':
+sys_rdq.c:129: warning: control reaches end of non-void function
+sys_rdq.c: In function `sys_ref_sys':
+sys_rdq.c:135: warning: control reaches end of non-void function
+sys_isr.c: In function `sys_cre_isr':
+sys_isr.c:52: warning: implicit declaration of function `ins_fifo'
+sys_isr.c: In function `sys_acre_isr':
+sys_isr.c:62: warning: control reaches end of non-void function
+sys_isr.c: In function `sys_del_isr':
+sys_isr.c:72: warning: implicit declaration of function `wlink_rem'
+sys_isr.c: In function `sys_dis_int':
+sys_isr.c:93: warning: implicit declaration of function `irq_mask_on'
+sys_isr.c: In function `sys_ena_int':
+sys_isr.c:101: warning: implicit declaration of function `irq_mask_off'
+sys_isr.c: In function `sys_cal_svc':
+sys_isr.c:131: warning: control reaches end of non-void function
+sys_isr.c: In function `sys_ref_cfg':
+sys_isr.c:158: warning: control reaches end of non-void function
+sys_isr.c: In function `sys_ref_ver':
+sys_isr.c:170: warning: control reaches end of non-void function
