@@ -8,9 +8,10 @@ i386 レイヤのシステムコールディスパッチャ。ユーザーモー
 `int 0x99` で発行されたシステムコールを受け取り、ITRON カーネル層の
 `itron_syscall()` に転送する。
 
-システムコールの戻り値は、プロセスの現在アクティブな `save` フレーム内の
-EAX スロットに直接書き込まれる。これにより、`restore` マクロがフレームから
-レジスタを復元する際に、戻り値が EAX レジスタに正しくロードされる。
+`intr_syscall` (intr.s) から `struct pt_regs *regs` を引数として呼び出される。
+ユーザースタック上のシステムコール引数を `regs->esp` 経由で読み取り、
+戻り値を `regs->eax` に書き込む。RESTORE_ALL が `regs->eax` を EAX レジスタに
+pop するため、ユーザータスクは EAX で戻り値を受け取る。
 
 ## 定数・マクロ
 
@@ -18,79 +19,74 @@ EAX スロットに直接書き込まれる。これにより、`restore` マク
 
 ## 構造体・型
 
-なし。
+なし。外部で定義された `struct pt_regs` (proc.h) を使用する。
 
-## グローバル変数
+## 外部参照
 
-なし (他モジュールで定義された `current_proc[]` を参照)。
+| シンボル | 定義元 | 説明 |
+|---------|--------|------|
+| `kernel_lk` | kernel/sched.c | Big Kernel Lock。全カーネルデータ構造を保護する |
+| `itron_syscall` | kernel/syscall.c | ITRON カーネル層のシステムコールディスパッチャ |
 
 ## 関数リファレンス
 
 ### c_intr_syscall
 
 ```c
-W c_intr_syscall(unsigned long apic, unsigned long sysid,
-                 unsigned long arg1, unsigned long arg2, unsigned long arg3,
-                 unsigned long arg4, unsigned long arg5, unsigned long arg6,
-                 unsigned long arg7)
+W c_intr_syscall(struct pt_regs *regs)
 ```
 
-**概要:** システムコールの C 言語側エントリポイント。アセンブリ側エントリ (`intr_syscall` in `intr.s`) から呼び出される。
+**概要:** システムコールの C 言語側エントリポイント。
 
 **引数:**
 
 | 引数 | 型 | 説明 |
 |------|------|------|
-| `apic` | `unsigned long` | APIC ID (正規化されて 0 または 1 になる) |
-| `sysid` | `unsigned long` | システムコール番号 |
-| `arg1` - `arg7` | `unsigned long` | システムコール引数 (最大 7 個) |
+| `regs` | `struct pt_regs *` | SAVE_ALL が構築した pt_regs フレームへのポインタ (カーネルスタック上) |
 
 **戻り値:** `W` -- システムコールの戻り値 (エラーコードまたは結果)。
 
 **処理内容:**
 
-1. **APIC インデックスの正規化:**
-   - `apic` が非ゼロの場合 1 に設定。APIC ID は環境により 0 以外の値を取る可能性があるため、0/1 に正規化。
+1. **CPU 判定:**
+   APIC ID レジスタ (`0xFEE00020`) をビット [31:24] で読み取り、0/1 に正規化。
 
-2. **カーネル層への転送:**
-   - `itron_syscall(apic, sysid, arg1, ..., arg7)` を呼び出し、ITRON カーネル層でシステムコールを処理。
+2. **ユーザースタックからの引数読み取り:**
+   `regs->esp` がユーザースタックポインタ (`int $0x99` 時点の ESP)。
+   klib.s の `syscall` ラッパーが `pushl %ebp; movl %esp, %ebp` した後に
+   `int $0x99` を発行するため、ユーザースタックのレイアウトは:
 
-3. **戻り値の書き込み:**
-   - `current_proc[apic]->stack - 20` のアドレスに戻り値 (`ret`) を書き込む。
+   ```
+   ustack[0]   saved EBP    (user_esp + 0)
+   ustack[1]   return addr  (user_esp + 4)
+   ustack[2]   sysid        (user_esp + 8)  ← func_code
+   ustack[3]   arg1         (user_esp + 12)
+   ustack[4]   arg2         (user_esp + 16)
+   ustack[5]   arg3         (user_esp + 20)
+   ustack[6]   arg4         (user_esp + 24)
+   ustack[7]   arg5         (user_esp + 28)
+   ustack[8]   arg6         (user_esp + 32)
+   ```
 
-**呼び出し元:** `intr_syscall` (アセンブリ側、`intr.s`)
+3. **Big Kernel Lock の取得:**
+   `smp_lock(&kernel_lk)` でスピンロックを取得。
+   全カーネルデータ構造へのアクセスはこのロック下で行われる。
 
-**注意点:**
+4. **ITRON カーネル層への転送:**
+   ```c
+   ret = itron_syscall(apic, ustack[2], ustack[3], ustack[4],
+                       ustack[5], ustack[6], ustack[7], ustack[8]);
+   ```
+   引数: apic, sysid, arg1, arg2, arg3, arg4, arg5, arg6 (計 8 個)。
 
-- **戻り値の書き込み位置の計算:**
-  - `save`/`restore` は `proc.reg[]` をスタックとして使用する
-  - `save` は 13 スロット (52 バイト) のフレームを書き込み、`proc.stack` を 52 バイト進める
-  - フレーム内の EAX スロットはフレーム先頭から 32 バイトのオフセット (スロット 8)
-  - したがって、現在のアクティブフレームの EAX = `proc.stack - 52 + 32` = `proc.stack - 20`
-  - `proc.reg[EAX]` (= `reg[8]`) に書き込むと初期フレームの EAX にしか書き込めず、ネストした `save` の後は `restore` が読み取るフレームとは一致しない
+5. **Big Kernel Lock の解放:**
+   `smp_unlock(&kernel_lk)` でロック解放。
 
-```
-  reg[] のレイアウト:
+6. **戻り値の書き込み:**
+   `regs->eax = ret` で pt_regs フレームの EAX スロットに戻り値を書き込む。
+   RESTORE_ALL がこの値を EAX レジスタに pop し、`iret` 後にユーザータスクが受け取る。
 
-  reg[0]:  ECX   ← 初期フレーム
-  reg[1]:  EDX
-  reg[2]:  ESP
-  ...
-  reg[8]:  EAX   ← proc.reg[EAX] はここ (初期フレーム)
-  ...
-  reg[12]: old_stack
-  reg[13]: ECX   ← 2番目のフレーム (1回目の save 後)
-  ...
-  reg[21]: EAX   ← restore が読むのはここ
-  ...
-  reg[25]: old_stack
-           ↑
-       stack が指す位置
-
-  stack - 20 = reg[21] のアドレス = 正しい EAX スロット
-```
-
-- システムコールの処理中にタスクスイッチが発生する場合がある (`slp_tsk` など)。その場合、`itron_syscall()` 内で `sched_do_next_tsk()` が呼ばれ、`current_proc[apic]` が更新される。戻り値は新しい (切り替え先の) タスクではなく、元のタスクの `save` フレームに書き込まれるべきだが、`current_proc` は既に更新されている可能性がある点に注意。
+**呼び出し元:** `intr_syscall` (intr.s)
 
 ## 補足
 
@@ -98,32 +94,63 @@ W c_intr_syscall(unsigned long apic, unsigned long sysid,
 
 ```
 ユーザータスク (Ring 3):
-  システムコールラッパー (lib/)
-    → int 0x99 (ソフトウェア割り込み)
+  lib/lib_tsk.c 等のラッパー関数
+    → syscall(sysid, arg1, arg2, ...) を呼び出し (引数をスタックに push)
 
-CPU (Ring 3 → Ring 0 遷移):
-  → TSS の ESP0/SS0 でカーネルスタックに切り替え
-  → IDT[0x99] → intr_syscall (intr.s)
+klib.s syscall ルーチン:
+    pushl   %ebp
+    movl    %esp, %ebp
+    int     $0x99                   → CPU が Ring 3→Ring 0 に遷移
+    popl    %ebp
+    ret                             ← EAX に戻り値
 
-intr_syscall (アセンブリ):
-  → save マクロ (レジスタ保存)
-  → APIC ID 読み取り
-  → c_intr_syscall(apic, sysid, arg1, ..., arg7)
-  → restore マクロ (レジスタ復元)
-  → iret (Ring 0 → Ring 3 復帰)
+intr.s intr_syscall:
+    SAVE_ALL                        → pt_regs フレーム構築
+    call    intr_enter              → k_nest[cpu]++
+    pushl   %esp                    → pt_regs* を引数に push
+    call    c_intr_syscall          → この関数
+    addl    $4, %esp
+    jmp     intr_return             → intr_leave → RESTORE_ALL → iret
+
+c_intr_syscall:
+    smp_lock(&kernel_lk)            → Big Kernel Lock 取得
+    itron_syscall(apic, sysid, ...) → ITRON カーネル層で処理
+    smp_unlock(&kernel_lk)          → ロック解放
+    regs->eax = ret                 → pt_regs の EAX スロットに戻り値書き込み
 ```
+
+### 戻り値の受け渡しメカニズム
+
+```
+カーネルスタック上の pt_regs:
+  ┌─────────────────────┐
+  │ ES          (0x00)  │
+  │ ...                 │
+  │ EAX         (0x20)  │ ← c_intr_syscall が regs->eax = ret で書き込む
+  │ EIP         (0x24)  │
+  │ ...                 │
+  └─────────────────────┘
+
+RESTORE_ALL:
+  popl %es; ...; popl %eax   ← pt_regs から EAX に ret が pop される
+
+iret:
+  Ring 3 に復帰 → ユーザータスクの EAX に戻り値が入っている
+```
+
+### システムコール中のタスクスイッチ
+
+`slp_tsk` や `wai_sem` など、呼び出しタスクがブロックするシステムコールでは、
+`itron_syscall()` 内部で `sched_do_next_tsk()` が呼ばれ、
+`sched_next_tsk_check` 用のフラグがセットされる。
+実際のタスクスイッチは `intr_leave` 内で ESP スワップとして実行される。
+
+戻り値の書き込みは `sched_do_next_tsk()` の前に行われるのではなく、
+ブロック解除時 (sig_sem, wup_tsk 等) に `proc_set_return_value()` で
+待ちタスクの pt_regs.eax に直接書き込まれる。
 
 ### システムコール番号
 
 システムコール番号 (`sysid`) は `include/syscall.h` で定義されている。
-主なシステムコール:
-
-| 番号 | 名前 | 機能 |
-|------|------|------|
-| - | `cre_tsk` | タスク生成 |
-| - | `act_tsk` | タスク起動 |
-| - | `slp_tsk` | タスク休止 |
-| - | `wup_tsk` | タスク起床 |
-| - | `cre_sem` | セマフォ生成 |
-| - | `wai_sem` | セマフォ待ち |
-| - | `sig_sem` | セマフォ返却 |
+負の値は TFN_xxx マクロ (例: `TFN_CRE_TSK = -0x05`) として定義され、
+lib/ のラッパー関数が対応する番号を `syscall()` に渡す。

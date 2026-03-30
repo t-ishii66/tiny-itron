@@ -4,21 +4,78 @@
 
 ## 概要
 
-割り込みハンドリングの中核を担うアセンブリファイル。カーネルで最も重要なファイルである。以下の機能を提供する:
+割り込みハンドリングの中核を担うアセンブリファイル。カーネルで最も重要なファイルである。
+以下の機能を提供する:
 
-1. **レジスタ退避 (`save`)**: 割り込み発生時に現在のプロセスのレジスタをプロセス構造体の `reg[]` 配列に退避する。APIC ID を読み取って CPU を判定し、per-CPU の `current_proc[]` を使用する
-2. **レジスタ復帰 (`restore`)**: 割り込みからの復帰時にレジスタを復帰する。ネストカウンタ (`k_nest`) が 0 になった場合にスケジューラを呼び出し、タスク切り替えを行う
-3. **ユーザーモード復帰 (`user_restore`)**: ユーザーモードへの特殊な復帰処理
-4. **CPU 例外ハンドラ**: 除算エラー、一般保護例外など
-5. **IRQ ハンドラ**: PIC (i8259) 経由の外部割り込み (IRQ0-15)
-6. **APIC タイマーハンドラ**: per-CPU の APIC タイマー割り込み
-7. **システムコールハンドラ**: `int 0x99` によるシステムコールエントリ
+1. **SAVE_ALL / RESTORE_ALL マクロ**: 割り込み発生時のレジスタ退避・復帰。per-task カーネルスタック上に `pt_regs` フレームを構築する
+2. **intr_enter**: per-CPU の割り込みネストカウンタ (`k_nest`) をインクリメント
+3. **intr_leave**: ネストカウンタをデクリメントし、最外レベルのとき ESP スワップによるタスクスイッチを実行
+4. **intr_return / intr_return_restore**: 共通の割り込み復帰パス (RESTORE_ALL + iret)
+5. **CPU 例外ハンドラ**: 除算エラー、一般保護例外、ページフォルトなど
+6. **IRQ ハンドラ**: PIC (i8259) 経由の外部割り込み (IRQ0-15)
+7. **APIC タイマーハンドラ**: per-CPU の Local APIC タイマー割り込み
+8. **システムコールハンドラ**: `int 0x99` によるシステムコールエントリ
+
+すべてのハンドラスタブは同一パターンで実装される:
+
+```
+SAVE_ALL            ← レジスタ退避、pt_regs フレーム構築
+call intr_enter     ← k_nest[cpu]++
+call c_handler      ← C 言語ハンドラ呼び出し
+jmp  intr_return    ← intr_leave → RESTORE_ALL → iret
+```
 
 ## 定数・マクロ
 
+### APIC_ID_REG
+
 | 名前 | 値 | 説明 |
 |------|------|------|
-| `APIC_ID_REG` | `0xFEE00020` | Local APIC の ID レジスタのアドレス。ビット 24-31 に APIC ID が格納される |
+| `APIC_ID_REG` | `0xFEE00020` | Local APIC の ID レジスタ (MMIO)。ビット [31:24] に APIC ID が格納される |
+
+### SAVE_ALL マクロ
+
+```asm
+.macro SAVE_ALL
+    pushl   %eax        # [ESP+0x20]
+    pushl   %ecx        # [ESP+0x1C]
+    pushl   %edx        # [ESP+0x18]
+    pushl   %ebx        # [ESP+0x14]
+    pushl   %ebp        # [ESP+0x10]
+    pushl   %esi        # [ESP+0x0C]
+    pushl   %edi        # [ESP+0x08]
+    pushl   %ds         # [ESP+0x04]
+    pushl   %es         # [ESP+0x00]
+    movw    $0x28, %ax  # SEL_K32_D (カーネルデータセグメント)
+    movw    %ax, %ds
+    movw    %ax, %es
+.endm
+```
+
+**概要:** 9 個のレジスタ (EAX, ECX, EDX, EBX, EBP, ESI, EDI, DS, ES) を per-task カーネルスタックに push する。CPU が Ring 3→Ring 0 遷移時に push した 5 個 (SS, ESP, EFLAGS, CS, EIP) と合わせて、14 dword (56 バイト) の `pt_regs` フレームが完成する。
+
+push 完了後、DS/ES をカーネルデータセグメント (`SEL_K32_D = 0x28`) にリロードする。
+CPU は Ring 3→Ring 0 遷移時に CS と SS を自動切り替えするが、DS/ES は変更しないため
+明示的なリロードが必要。
+
+### RESTORE_ALL マクロ
+
+```asm
+.macro RESTORE_ALL
+    popl    %es
+    popl    %ds
+    popl    %edi
+    popl    %esi
+    popl    %ebp
+    popl    %ebx
+    popl    %edx
+    popl    %ecx
+    popl    %eax
+.endm
+```
+
+**概要:** SAVE_ALL の逆順で 9 個のレジスタを pop する。実行後、ESP は CPU interrupt frame
+(EIP, CS, EFLAGS, ESP, SS) を指しており、`iret` で Ring 3 に復帰できる。
 
 ## グローバル変数
 
@@ -29,468 +86,257 @@ k_nest0:  .long  0
 k_nest1:  .long  0
 ```
 
-**概要:** per-CPU の割り込みネストカウンタ。`save` でインクリメント、`restore` でデクリメントされる。`k_nest == 0` の場合のみ `restore` でスケジューラを呼び出す。
+**概要:** per-CPU の割り込みネストカウンタ。`intr_enter` でインクリメント、`intr_leave` でデクリメントされる。値が 0 になったとき (最外の割り込みから復帰するとき) のみタスクスイッチを試みる。
+
+### gp_error_code
+
+```asm
+gp_error_code:  .long 0
+```
+
+**概要:** 直近の #GP 例外のエラーコード。`intr_general` がスタックから退避し、`c_intr_general` が診断に使用する。
 
 ## 外部シンボル参照
 
 | シンボル | 定義元 | 説明 |
 |---------|--------|------|
-| `current_proc` | proc.c | per-CPU の現在実行中プロセスポインタ配列 (`proc_t* current_proc[2]`) |
+| `current_proc` | kernelval.c | per-CPU の現在実行中プロセスポインタ配列 (`proc_t* current_proc[2]`) |
 | `sleep_current_proc` | proc.c | 現在プロセスをスリープ状態にする関数 |
 | `ena_tex` | kernel | タスク例外処理の有効化 |
-| `sched_next_tsk_check` | sched.c | 次タスクへの切り替えチェック (タスクスイッチの判定と実行) |
+| `sched_next_tsk_check` | sched.c | `int sched_next_tsk_check(int apic)` — 次タスクへの切り替えチェック。`current_proc[apic]` を更新する可能性がある |
+| `tss_update_esp0` | tss.c | `void tss_update_esp0(int cpu, unsigned long esp0)` — TSS.esp0 を更新 |
 
-## ラベル・ルーチンリファレンス
+## pt_regs フレームレイアウト
 
-### save
+SAVE_ALL 完了後、カーネルスタック上に以下のフレームが構築される:
 
-```asm
-save:
-    pushl  %ebx
-    pushl  %eax
-    movl   APIC_ID_REG, %eax
-    shrl   $24, %eax
-    testl  %eax, %eax
-    jnz    save_cpu1
+```
+          Low address (ESP)
+      ┌─────────────────────┐
+      │ ES          (0x00)  │  ← SAVE_ALL (最後に push)
+      │ DS          (0x04)  │
+      │ EDI         (0x08)  │
+      │ ESI         (0x0C)  │
+      │ EBP         (0x10)  │
+      │ EBX         (0x14)  │
+      │ EDX         (0x18)  │
+      │ ECX         (0x1C)  │
+      │ EAX         (0x20)  │  ← SAVE_ALL (最初に push)
+      ├─────────────────────┤
+      │ EIP         (0x24)  │  ← CPU (interrupt frame)
+      │ CS          (0x28)  │
+      │ EFLAGS      (0x2C)  │
+      │ ESP (user)  (0x30)  │  ← Ring 3→0 のみ
+      │ SS  (user)  (0x34)  │
+      └─────────────────────┘
+          High address (kern_stack_top)
 ```
 
-**概要:** 割り込み発生時のレジスタ退避ルーチン。現在の CPU を APIC ID で判定し、対応する `current_proc[cpu]` のプロセス構造体の `reg[]` スタックに 13 個のレジスタを退避する。
+これは `struct pt_regs` (proc.h で定義) と同一のレイアウトである。
 
-**処理内容:**
+## ルーチンリファレンス
 
-1. EBX と EAX をスタックに一時退避する (後で reg[] に保存するため)
-2. `APIC_ID_REG` (0xFEE00020) を読み取り、ビット 24 以降をシフトして APIC ID を取得する
-3. APIC ID が 0 なら CPU 0 パス (`save_cpu0`)、非 0 なら CPU 1 パス (`save_cpu1`) に分岐する
-4. CPU に応じた `current_proc[cpu]` のアドレスを EBX にロードする
-5. 対応する `k_nest` カウンタをインクリメントする
-6. `save_common` でレジスタ退避を実行する:
-   - プロセス構造体の `stack` フィールド (先頭 4 バイト) に格納されている現在のレジスタスタックポインタを読み出す
-   - `stack` ポインタを 52 バイト進める (13 レジスタ x 4 バイト)
-   - 旧ポインタが指す位置に 13 個のレジスタを保存する
-
-**退避されるレジスタ (13 個、計 52 バイト):**
-
-| オフセット | レジスタ | 取得元 |
-|-----------|---------|--------|
-| 0 | ECX | レジスタ直接 |
-| 4 | EDX | レジスタ直接 |
-| 8 | ESP | 割り込みフレーム `24(%esp)` (Ring 3→0 遷移時にハードウェアが退避した ESP) |
-| 12 | EIP | 割り込みフレーム `12(%esp)` (ハードウェアが退避した戻りアドレス) |
-| 16 | EBP | レジスタ直接 |
-| 20 | ESI | レジスタ直接 |
-| 24 | EDI | レジスタ直接 |
-| 28 | EFLAGS | `pushfl` / `popl` で取得 |
-| 32 | EAX | スタック `(%esp)` (冒頭で退避した値) |
-| 36 | EBX | スタック `4(%esp)` (冒頭で退避した値) |
-| 40 | DS | セグメントレジスタ直接 |
-| 44 | ES | セグメントレジスタ直接 |
-| 48 | old_stack | 前回の `stack` ポインタ値 (ネスト復帰用) |
-
-**呼び出し元:** 全ての割り込みハンドラ (`intr_irq0` 〜 `intr_irq15`, `intr_divide`, `intr_default`, `intr_general`, `intr_smp_timer0`, `intr_smp_timer1`, `intr_syscall`)
-
-**注意点:**
-
-- ESP の取得は `24(%esp)` を参照する。これは Ring 3→Ring 0 の特権レベル遷移時にハードウェアが SS と ESP をスタックにプッシュすることを前提としている。Ring 0→Ring 0 の割り込みでは SS/ESP がプッシュされないため、`save` は Ring 0 での割り込みでは正しく動作しない
-- `save` は `call` で呼ばれるため、リターンアドレスがスタックにプッシュされている。この点もスタックオフセットの計算に影響する
-
-### save_cpu0
+### intr_enter
 
 ```asm
-save_cpu0:
-    leal  current_proc, %ebx
-    movl  k_nest0, %eax
-    incl  %eax
-    movl  %eax, k_nest0
-    jmp   save_common
+intr_enter:
+    movl    APIC_ID_REG, %eax   # APIC ID 読み取り
+    shrl    $24, %eax           # ビット [31:24] → EAX = 0 or 1
+    testl   %eax, %eax
+    jnz     1f
+    incl    k_nest0             # CPU 0: k_nest0++
+    ret
+1:
+    incl    k_nest1             # CPU 1: k_nest1++
+    ret
 ```
 
-**概要:** CPU 0 用の save パス。`current_proc[0]` と `k_nest0` を使用する。
+**概要:** APIC ID で CPU を判定し、対応する `k_nest` カウンタをインクリメントする。
 
-### save_cpu1
+**呼び出し元:** 全ハンドラスタブ (SAVE_ALL 直後)
+
+---
+
+### intr_leave
+
+**概要:** ネストカウンタをデクリメントし、最外レベル (k_nest == 0) のときタスクスイッチを実行する。
+割り込みハンドリングの最も重要なルーチンで、タスクスイッチの核心部分を担う。
+
+**処理内容 (CPU 0 パス、CPU 1 も同一ロジック):**
 
 ```asm
-save_cpu1:
-    leal  current_proc+4, %ebx
-    movl  k_nest1, %eax
-    incl  %eax
-    movl  %eax, k_nest1
+intr_leave_cpu0:
+    decl    k_nest0             # k_nest0--
+    jnz     intr_leave_done     # まだネスト中 → タスクスイッチなし
+
+    # Step 1: 現在の ESP を running task の proc_t に保存
+    movl    current_proc, %ebx      # EBX = current_proc[0]
+    movl    %esp, (%ebx)            # current_proc[0]->kern_esp = ESP
+
+    # Step 2: スケジューラに問い合わせ (current_proc[0] が変わる可能性)
+    pushl   $0
+    call    sched_next_tsk_check    # int sched_next_tsk_check(0)
+    addl    $4, %esp
+
+    # Step 3: (更新された可能性のある) current_proc[0] から ESP をロード
+    movl    current_proc, %ebx      # 再読み込み
+    movl    (%ebx), %esp            # ESP = new task の kern_esp ★ここがタスクスイッチ
+
+    # Step 4: TSS.esp0 を新タスクの kern_stack_top に更新
+    pushl   4(%ebx)                 # proc_t.kern_stack_top (offset 4)
+    pushl   $0                      # cpu = 0
+    call    tss_update_esp0
+    addl    $8, %esp
+
+    ret                             # → intr_return_restore に戻る
 ```
 
-**概要:** CPU 1 用の save パス。`current_proc[1]` と `k_nest1` を使用する。
+**タスクスイッチの仕組み:**
 
-### save_common
+Step 3 の `movl (%ebx), %esp` が実質的なコンテキストスイッチである。
+この時点で ESP が新タスクのカーネルスタックを指すようになり、
+以降の RESTORE_ALL は新タスクの pt_regs を pop し、
+`iret` は新タスクの EIP/CS/EFLAGS/ESP/SS で Ring 3 に復帰する。
+
+旧タスクのレジスタは Step 1 で保存した ESP が指すカーネルスタック上に残り、
+旧タスクが再スケジュールされたとき Step 3 で ESP がロードされて復帰する。
+
+**新規タスクの初回スケジュール:**
+
+`proc_create()` は新タスクのカーネルスタック上に偽の pt_regs フレームと
+戻りアドレス (`intr_return_restore`) を構築する。
+`intr_leave` の `ret` がこの戻りアドレスを pop し、
+`intr_return_restore` → RESTORE_ALL → `iret` で Ring 3 に遷移する。
+
+**ネスト中の場合:**
+
+`k_nest` が 0 にならない場合 (ネストした割り込みの復帰)、`intr_leave_done` の `ret` で
+単純に呼び出し元に戻る。タスクスイッチは行わない。
+
+---
+
+### intr_return / intr_return_restore
 
 ```asm
-save_common:
-    movl  (%ebx), %ebx          # ebx = current_proc[cpu]
-    pushl (%ebx)                 # old stack ptr を退避
-    movl  (%ebx), %eax
-    addl  $52, %eax
-    movl  %eax, (%ebx)          # stack += 52 (新しい退避フレームを確保)
-    popl  %ebx                   # ebx = old stack ptr (退避先アドレス)
-    movl  %ecx, (%ebx)          # ECX を退避
-    ...
+intr_return:
+    call    intr_leave          # k_nest--, possible task switch
+    # fall through to intr_return_restore
+
+intr_return_restore:
+    RESTORE_ALL                 # pop ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX
+    iret                        # pop EIP,CS,EFLAGS (and ESP,SS if Ring 3)
 ```
 
-**概要:** CPU 共通のレジスタ退避処理。
+**概要:** 全ハンドラスタブの共通復帰パス。`intr_leave` でネスト管理とタスクスイッチを行い、
+RESTORE_ALL で pt_regs フレームからレジスタを復帰し、`iret` で Ring 3 に戻る。
 
-**処理内容:**
+`intr_return_restore` は `.globl` シンボルで、`proc_create()` が新タスクの偽フレームに
+戻りアドレスとして設定する。
 
-1. `current_proc[cpu]` のポインタをデリファレンスしてプロセス構造体のアドレスを取得する
-2. プロセス構造体の先頭 (= `stack` フィールド) から現在のレジスタスタックポインタを読み出す
-3. `stack` を 52 バイト加算して新しいフレームを確保する
-4. 旧ポインタが指す位置に 13 個のレジスタを順次保存する
-5. DS と ES をカーネルデータセグメント (SEL_K32_D = 0x28) にリロードする。CPU は Ring 3→Ring 0 遷移時に CS と SS を自動切り替えするが DS/ES は変更しないため、save で明示的にリロードする
-6. 退避完了後、冒頭でスタックに退避した EAX と EBX を復帰して `ret` する
-
-### restore
-
-```asm
-restore:
-    movl  APIC_ID_REG, %eax
-    shrl  $24, %eax
-    testl %eax, %eax
-    jnz   restore_cpu1
-```
-
-**概要:** 割り込みからの復帰ルーチン。レジスタを復帰し、必要に応じてタスクスイッチを行う。
-
-**処理内容:**
-
-1. APIC ID を読み取って CPU を判定する
-2. CPU に応じた `k_nest` カウンタをデクリメントする
-3. `k_nest` が 0 になった場合 (最外の割り込みから復帰する場合):
-   - `sched_next_tsk_check(apic)` を呼び出す (引数: CPU 番号 0 または 1)
-   - 戻り値が非 0 の場合、タスクスイッチが発生したため `current_proc[cpu]` を再ロードする
-4. プロセス構造体の `stack` ポインタを 52 バイト減算して退避フレームに戻す
-5. 13 個のレジスタを順次復帰する:
-   - ECX, EDX, EBP, ESI, EDI: レジスタに直接復帰
-   - EFLAGS: IF ビット (ビット 9) をクリアしてから `popfl` で復帰する。これにより、復帰処理中にタイマー割り込みが発生することを防ぐ。実際の EFLAGS は `iret` で割り込みフレームからロードされる
-6. `k_nest` が 0 の場合 (最外レベル) のみタスクスイッチ処理を実行する:
-   - ESP を割り込みフレームの対応位置 (`16(%esp)`) に書き戻す
-   - EIP を割り込みフレームの対応位置 (`4(%esp)`) に書き戻す
-   - これにより `iret` 実行時に新しいタスクの EIP/ESP に遷移する
-7. EAX, EBX, DS, ES を復帰して `ret` する
-
-**呼び出し元:** 全ての割り込みハンドラ (`save` の後に呼ばれる)
-
-**注意点:**
-
-- EFLAGS 復帰時に IF ビットをクリアする (`andl $0xfffffdff, %eax`) ことで、復帰のクリティカルセクション中の割り込みを防止する
-- タスクスイッチ時の ESP/EIP 書き戻しは、`iret` が参照するスタック上の割り込みフレームを直接書き換えることで実現する
-
-### restore_cpu0
-
-```asm
-restore_cpu0:
-    leal  current_proc, %ebx
-    movl  k_nest0, %eax
-    decl  %eax
-    movl  %eax, k_nest0
-    ...
-    pushl $0              # apic = 0
-    call  sched_next_tsk_check
-    addl  $4, %esp
-```
-
-**概要:** CPU 0 用の restore パス。`k_nest0` をデクリメントし、ネストレベル 0 で `sched_next_tsk_check(0)` を呼び出す。
-
-### restore_cpu1
-
-```asm
-restore_cpu1:
-    leal  current_proc+4, %ebx
-    movl  k_nest1, %eax
-    decl  %eax
-    movl  %eax, k_nest1
-    ...
-    pushl $1              # apic = 1
-    call  sched_next_tsk_check
-    addl  $4, %esp
-```
-
-**概要:** CPU 1 用の restore パス。`k_nest1` をデクリメントし、ネストレベル 0 で `sched_next_tsk_check(1)` を呼び出す。
+---
 
 ### user_restore
 
 ```asm
 user_restore:
-    addl  $8, %esp
-    call  ena_tex
-    popfl
-    popl  %edi
-    popl  %esi
-    popl  %edx
-    popl  %ecx
-    popl  %ebx
-    popl  %eax
-    ret
+    addl    $8, %esp    # texptn, exinf をスキップ (8 バイト)
+    call    ena_tex     # タスク例外を再有効化
+    popfl               # EFLAGS 復帰
+    popl    %edi        # GPR 復帰 (7 個)
+    popl    %esi
+    popl    %edx
+    popl    %ecx
+    popl    %ebx
+    popl    %eax
+    ret                 # 元の EIP に戻る
 ```
 
-**概要:** ユーザーモードへの復帰処理。`save` / `restore` を使用しない特殊なルーチン。
+**概要:** タスク例外ハンドラからの復帰パス。`interrupt.c` の `stack_adjust()` がユーザースタック上に
+例外ハンドラの引数と退避レジスタを構築し、例外ハンドラが `return` すると `user_restore` に到達する。
 
-**処理内容:**
+**ユーザースタックレイアウト (user_restore エントリ時):**
 
-1. ESP を 8 バイト加算する (スタック上の不要なデータをスキップ)
-2. `ena_tex()` を呼び出してタスク例外処理を有効化する
-3. EFLAGS, EDI, ESI, EDX, ECX, EBX, EAX をスタックから順次復帰する
-4. `ret` で呼び出し元に戻る
-
-**呼び出し元:** カーネルからユーザーモードへ復帰する特定のパス
-
-### intr_default
-
-```asm
-intr_default:
-    call  save
-    call  c_intr_default
-    call  restore
-    iret
+```
+ESP+0:  texptn     (例外パターン、ハンドラが消費済み)
+ESP+4:  exinf      (拡張情報、ハンドラが消費済み)
+ESP+8:  EFLAGS     (退避値)
+ESP+12: EDI
+ESP+16: ESI
+ESP+20: EDX
+ESP+24: ECX
+ESP+28: EBX
+ESP+32: EAX
+ESP+36: 元の EIP   (ret で復帰するアドレス)
 ```
 
-**概要:** デフォルト割り込みハンドラ。未登録の割り込みベクタに対応する。
+---
 
-**処理内容:** `save` → `c_intr_default` (C 関数) → `restore` → `iret` の標準パターン。
+### 例外ハンドラ
 
-**呼び出し元:** IDT で未設定の割り込みベクタ
+#### エラーコードなし (ベクタ 0-7, 9, 16)
 
-### intr_divide
+| ラベル | ベクタ | 例外名 | 処理 |
+|--------|--------|--------|------|
+| `intr_divide` | 0 | #DE (除算エラー) | SAVE_ALL → intr_enter → c_intr_divide → intr_return |
+| `intr_singlestep` | 1 | #DB (デバッグ) | `iret` のみ |
+| `intr_nmi` | 2 | NMI | `iret` のみ |
+| `intr_breakpoint` | 3 | #BP | `iret` のみ |
+| `intr_overflow` | 4 | #OF | `iret` のみ |
+| `intr_bounds` | 5 | #BR | `iret` のみ |
+| `intr_opcode` | 6 | #UD | `iret` のみ |
+| `intr_copr_not_available` | 7 | #NM | `iret` のみ |
+| `intr_copr_seg_overrun` | 9 | (旧式) | `iret` のみ |
+| `intr_copr_error` | 16 | #MF | `iret` のみ |
 
-```asm
-intr_divide:
-    call  save
-    call  c_intr_divide
-    call  restore
-    iret
-```
+#### エラーコード付き (ベクタ 8, 10-14)
 
-**概要:** 除算エラー例外ハンドラ (INT 0)。
+CPU がエラーコードを自動的にスタックに push する。エラーコードを `iret` 前に除去しないと、
+`iret` がエラーコードを EIP として解釈し、即座に再フォルト → ダブルフォルト → トリプルフォルトとなる。
 
-**処理内容:** `save` → `c_intr_divide` (C 関数) → `restore` → `iret` の標準パターン。
+| ラベル | ベクタ | 例外名 | 処理 |
+|--------|--------|--------|------|
+| `intr_doublefault` | 8 | #DF | `addl $4, %esp` → `iret` |
+| `intr_tss` | 10 | #TS | `addl $4, %esp` → `iret` |
+| `intr_segment_not_present` | 11 | #NP | `addl $4, %esp` → `iret` |
+| `intr_stack` | 12 | #SS | `addl $4, %esp` → `iret` |
+| `intr_general` | 13 | #GP | エラーコード保存 → `addl $4, %esp` → 標準パターン |
+| `intr_page` | 14 | #PF | `addl $4, %esp` → 標準パターン |
 
-**呼び出し元:** CPU が除算エラーを検出した場合
-
-### intr_singlestep
-
-```asm
-intr_singlestep:
-    iret
-```
-
-**概要:** シングルステップ例外ハンドラ (INT 1)。何もせず `iret` で復帰する。
-
-### intr_nmi
-
-```asm
-intr_nmi:
-    iret
-```
-
-**概要:** NMI (Non-Maskable Interrupt) ハンドラ (INT 2)。何もせず `iret` で復帰する。
-
-### intr_breakpoint
-
-```asm
-intr_breakpoint:
-    iret
-```
-
-**概要:** ブレークポイント例外ハンドラ (INT 3)。何もせず `iret` で復帰する。
-
-### intr_overflow
-
-```asm
-intr_overflow:
-    iret
-```
-
-**概要:** オーバーフロー例外ハンドラ (INT 4)。何もせず `iret` で復帰する。
-
-### intr_bounds
-
-```asm
-intr_bounds:
-    iret
-```
-
-**概要:** 境界範囲超過例外ハンドラ (INT 5)。何もせず `iret` で復帰する。
-
-### intr_opcode
-
-```asm
-intr_opcode:
-    iret
-```
-
-**概要:** 無効オペコード例外ハンドラ (INT 6)。何もせず `iret` で復帰する。
-
-### intr_copr_not_available
-
-```asm
-intr_copr_not_available:
-    iret
-```
-
-**概要:** コプロセッサ使用不可例外ハンドラ (INT 7)。何もせず `iret` で復帰する。
-
-### intr_doublefault
-
-```asm
-intr_doublefault:
-    iret
-```
-
-**概要:** ダブルフォルト例外ハンドラ (INT 8)。エラーコードを破棄して `iret` で復帰する。
-
-**注意点:** ベクタ 8 はエラーコード付き例外。`addl $4, %esp` でエラーコードを破棄してから `iret` する。
-
-### intr_copr_seg_overrun
-
-```asm
-intr_copr_seg_overrun:
-    iret
-```
-
-**概要:** コプロセッサセグメントオーバーラン例外ハンドラ (INT 9)。何もせず `iret` で復帰する。
-
-### intr_tss
-
-```asm
-intr_tss:
-    addl  $4, %esp
-    iret
-```
-
-**概要:** 無効 TSS 例外ハンドラ (INT 10)。エラーコードを破棄して `iret` で復帰する。
-
-### intr_segment_not_present
-
-```asm
-intr_segment_not_present:
-    addl  $4, %esp
-    iret
-```
-
-**概要:** セグメント不在例外ハンドラ (INT 11)。エラーコードを破棄して `iret` で復帰する。
-
-### intr_stack
-
-```asm
-intr_stack:
-    addl  $4, %esp
-    iret
-```
-
-**概要:** スタック例外ハンドラ (INT 12)。エラーコードを破棄して `iret` で復帰する。
-
-### intr_general
+**intr_general の詳細:**
 
 ```asm
 intr_general:
-    popl  gp_error_code        # エラーコードを保存
-    call  save
-    call  c_intr_general
-    call  restore
-    iret
+    pushl   %eax                # EAX を一時退避
+    movl    4(%esp), %eax       # EAX = エラーコード
+    movl    %eax, gp_error_code # グローバル変数に保存
+    popl    %eax                # EAX 復帰
+    addl    $4, %esp            # エラーコード除去
+    SAVE_ALL
+    call    intr_enter
+    call    c_intr_general      # 診断出力して停止
+    jmp     intr_return
 ```
 
-**概要:** 一般保護例外ハンドラ (INT 13)。エラーコードを `gp_error_code` グローバル変数に保存してから `save` → `c_intr_general` → `restore` → `iret` を実行する。
+エラーコードを `gp_error_code` グローバル変数に保存してから除去する。
+`c_intr_general` は通常 hlt で停止するため、`intr_return` には到達しない。
 
-**処理内容:**
+**intr_page の詳細:**
 
-1. スタック上のエラーコードを `gp_error_code` に pop する (エラーコード除去 + 保存を同時に実行)
-2. `save` でレジスタ退避
-3. `c_intr_general` で診断情報を出力して停止する
-4. `restore` → `iret` (通常は c_intr_general が hlt で停止するため到達しない)
+エラーコードを単に破棄してから標準パターンで処理する。
+`c_intr_page` は CR2 レジスタからフォルトアドレスを直接読み取る。
 
-**呼び出し元:** Ring 3 から `cli`/`sti` を実行した場合、無効なセグメントアクセスなど
+---
 
-**注意点:** エラーコードは `save` の前に除去する必要がある。エラーコードがスタックに残っていると `save` が読み取るフレームレイアウト (EIP, CS, EFLAGS, ESP, SS) がずれて正しく保存できない。
+### IRQ ハンドラ (IRQ 0-15)
 
-### intr_page
+全て同一パターン: `SAVE_ALL → call intr_enter → call c_intr_irqN → jmp intr_return`
 
-```asm
-intr_page:
-    addl  $4, %esp
-    call  save
-    call  c_intr_page
-    call  restore
-    iret
-```
-
-**概要:** ページフォルト例外ハンドラ (INT 14)。エラーコードを破棄してから `save` → `c_intr_page` → `restore` → `iret` を実行する。
-
-**処理内容:**
-
-1. `addl $4, %esp` でエラーコードを破棄する
-2. `save` でレジスタ退避
-3. `c_intr_page` でフォルトアドレス (CR2) を読み取り処理する
-4. `restore` → `iret` で復帰する
-
-**注意点:** ベクタ 8, 10, 11, 12, 13, 14 はエラーコード付き例外。エラーコードを `iret` 前に除去しないと、`iret` がエラーコードを EIP として解釈し、即座に再フォルト→ダブルフォルト→トリプルフォルトとなる。
-
-### intr_copr_error
-
-```asm
-intr_copr_error:
-    iret
-```
-
-**概要:** コプロセッサエラー例外ハンドラ (INT 16)。何もせず `iret` で復帰する。
-
-### intr_irq0
-
-```asm
-intr_irq0:
-    call  save
-    call  c_intr_irq0
-    call  restore
-    iret
-```
-
-**概要:** IRQ 0 (PIT タイマー) ハンドラ。
-
-**処理内容:** `save` → `c_intr_irq0` → `restore` → `iret` の標準パターン。
-
-**呼び出し元:** PIT (Programmable Interval Timer) の周期割り込み (~17ms, HZ=60)
-
-### intr_irq1
-
-```asm
-intr_irq1:
-    call  save
-    call  c_intr_irq1
-    call  restore
-    iret
-```
-
-**概要:** IRQ 1 (キーボード) ハンドラ。他の IRQ ハンドラと同じ標準パターン (`save` → C ハンドラ → `restore` → `iret`) を使用する。
-
-**処理内容:**
-
-1. `save` でレジスタ退避
-2. `c_intr_irq1` でキーボード ISR を実行する (スキャンコード処理 + EOI)
-3. `restore` でレジスタ復帰 (k_nest=0 ならタスクスイッチ検討)
-4. `iret` で割り込みから復帰
-
-**呼び出し元:** キーボードコントローラ (i8042) からの割り込み
-
-**注意点:** 以前は `sti` でネスト割り込みを許可していたが、Ring 0→Ring 0 の割り込みでは CPU が SS/ESP をプッシュしないため `save` がゴミを読む問題があり、簡素化された。
-
-### intr_irq2 〜 intr_irq15
-
-```asm
-intr_irqN:
-    call  save
-    call  c_intr_irqN
-    call  restore
-    iret
-```
-
-**概要:** IRQ 2〜15 のハンドラ。全て `save` → `c_intr_irqN` → `restore` → `iret` の標準パターン。
+PIC (i8259) 経由の外部割り込みは CPU 0 (BSP) のみに配送される。
 
 | ラベル | IRQ | 割り込みソース |
 |--------|-----|-------------|
+| `intr_irq0` | 0 | PIT タイマー (~17ms, HZ=60) |
+| `intr_irq1` | 1 | キーボード (i8042) |
 | `intr_irq2` | 2 | カスケード (スレーブ PIC) |
 | `intr_irq3` | 3 | COM2 |
 | `intr_irq4` | 4 | COM1 |
@@ -506,163 +352,135 @@ intr_irqN:
 | `intr_irq14` | 14 | プライマリ IDE |
 | `intr_irq15` | 15 | セカンダリ IDE |
 
-### intr_smp_timer0
+---
 
-```asm
-intr_smp_timer0:
-    call  save
-    call  c_intr_smp_timer0
-    call  restore
-    iret
-```
+### APIC タイマーハンドラ
 
-**概要:** CPU 0 用 APIC タイマーハンドラ。
+| ラベル | CPU | 説明 |
+|--------|-----|------|
+| `intr_smp_timer0` | 0 | CPU 0 の Local APIC タイマー |
+| `intr_smp_timer1` | 1 | CPU 1 の Local APIC タイマー |
 
-**処理内容:** `save` → `c_intr_smp_timer0` → `restore` → `iret` の標準パターン。
+どちらも同一パターン: `SAVE_ALL → call intr_enter → call c_intr_smp_timerN → jmp intr_return`
 
-**呼び出し元:** CPU 0 の Local APIC タイマー
-
-### intr_smp_timer1
-
-```asm
-intr_smp_timer1:
-    call  save
-    call  c_intr_smp_timer1
-    call  restore
-    iret
-```
-
-**概要:** CPU 1 用 APIC タイマーハンドラ。
-
-**処理内容:** `save` → `c_intr_smp_timer1` → `restore` → `iret` の標準パターン。
-
-**呼び出し元:** CPU 1 の Local APIC タイマー
+---
 
 ### intr_syscall
 
 ```asm
 intr_syscall:
-    call  save
-    movl  APIC_ID_REG, %eax
-    shrl  $24, %eax
-    testl %eax, %eax
-    jz    1f
-    movl  $1, %eax
-1:
-    movl  12(%esp), %ebx
-    pushl 36(%ebx)
-    pushl 32(%ebx)
-    pushl 28(%ebx)
-    pushl 24(%ebx)
-    pushl 20(%ebx)
-    pushl 16(%ebx)
-    pushl 12(%ebx)
-    pushl 8(%ebx)
-    pushl %eax
-    call  c_intr_syscall
-    addl  $36, %esp
-    call  restore
-    iret
+    SAVE_ALL                    # ユーザーレジスタを per-task カーネルスタックに退避
+    call    intr_enter          # k_nest[cpu]++
+    pushl   %esp                # 引数: pt_regs* (ESP が pt_regs フレームを指す)
+    call    c_intr_syscall      # W c_intr_syscall(struct pt_regs *regs)
+    addl    $4, %esp            # 引数クリーンアップ (cdecl)
+    jmp     intr_return         # intr_leave → RESTORE_ALL → iret
 ```
 
-**概要:** システムコールディスパッチャ。`int 0x99` で呼び出される。
+**概要:** `int 0x99` によるシステムコールエントリ。
 
 **処理内容:**
 
-1. `save` でレジスタ退避
-2. APIC ID を読み取って CPU 番号 (0 または 1) を取得する
-3. `save` 後のスタックから退避フレームのアドレスを取得 (`12(%esp)` = EBX が指す退避フレーム)
-4. 退避フレームから以下の 8 個の引数をスタックにプッシュする:
-   - オフセット 8: ESP (引数ポインタとして使用)
-   - オフセット 12: EIP
-   - オフセット 16: EBP
-   - オフセット 20: ESI
-   - オフセット 24: EDI
-   - オフセット 28: EFLAGS
-   - オフセット 32: EAX
-   - オフセット 36: EBX
-5. CPU 番号 (`apic`) を最初の引数としてプッシュする
-6. `c_intr_syscall(apic, esp, eip, ebp, esi, edi, eflags, eax, ebx)` を呼び出す
-7. スタックを 36 バイトクリーンアップする (9 引数 x 4 バイト)
-8. `restore` → `iret` で復帰する
-
-**呼び出し元:** klib.s の `syscall` 関数 (`int $0x99`)
+1. SAVE_ALL で全レジスタを退避。ESP が pt_regs フレームの先頭を指す
+2. `intr_enter` で k_nest をインクリメント
+3. ESP (= pt_regs へのポインタ) を引数として `c_intr_syscall` を呼び出す
+4. `c_intr_syscall` は `regs->esp` 経由でユーザースタックからシステムコール番号と引数を読み取り、
+   戻り値を `regs->eax` に書き込む
+5. `intr_return` → `intr_leave` → RESTORE_ALL で `regs->eax` が EAX にロードされ、
+   `iret` でユーザータスクに戻り値が返る
 
 **注意点:**
 
-- ユーザータスクのシステムコール番号は EBP レジスタ経由で渡される
-- `c_intr_syscall` の戻り値は `proc->stack - 20` (退避フレームの EAX スロット) に書き込まれ、`restore` 経由でユーザータスクの EAX に返される
+- システムコール番号は EAX レジスタ経由ではなく、ユーザースタック上に置かれている
+  (klib.s の `syscall` ラッパーが `int $0x99` 前に push)
+- 旧アーキテクチャでは 9 引数を push して呼び出していたが、現在は pt_regs ポインタ 1 つのみ
 
 ## 補足
 
-### 割り込みフレームのスタックレイアウト
-
-Ring 3 → Ring 0 遷移時の CPU が自動的にプッシュするスタックフレーム:
+### ハンドラスタブのパターン
 
 ```
-高アドレス
-+----------+
-| SS       |  (Ring 3 のスタックセグメント)
-+----------+
-| ESP      |  (Ring 3 のスタックポインタ)
-+----------+
-| EFLAGS   |
-+----------+
-| CS       |
-+----------+
-| EIP      |  ← iret で戻るアドレス
-+----------+
-低アドレス (現在の ESP)
+              ┌────────────────────────────────────────────┐
+              │          Handler Stub Pattern              │
+              └────────────────────────────────────────────┘
+
+   Ring 3 で実行中                  割り込み発生
+          ↓                              ↓
+   CPU が SS,ESP,EFLAGS,CS,EIP を自動 push (TSS.esp0 → カーネルスタック)
+          ↓
+   ┌─────────────────┐
+   │    SAVE_ALL      │  EAX,ECX,EDX,EBX,EBP,ESI,EDI,DS,ES を push
+   │                  │  DS/ES をカーネルセグメントにリロード
+   └────────┬────────┘
+            ↓
+   ┌─────────────────┐
+   │   intr_enter     │  k_nest[cpu]++
+   └────────┬────────┘
+            ↓
+   ┌─────────────────┐
+   │   C handler      │  c_intr_irq0, c_intr_syscall 等
+   └────────┬────────┘
+            ↓
+   ┌─────────────────┐
+   │   intr_leave     │  k_nest[cpu]--
+   │                  │  k_nest==0 なら ESP スワップ (タスクスイッチ)
+   │                  │  tss_update_esp0() で TSS 更新
+   └────────┬────────┘
+            ↓
+   ┌─────────────────┐
+   │  RESTORE_ALL     │  ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX を pop
+   └────────┬────────┘
+            ↓
+   ┌─────────────────┐
+   │     iret         │  EIP,CS,EFLAGS,ESP,SS を pop → Ring 3 復帰
+   └─────────────────┘
 ```
 
-`save` が `call` で呼ばれた時点のスタック (save 内部、EAX/EBX プッシュ後):
+### タスクスイッチの全体フロー
+
+1. タイマー割り込み (APIC タイマーまたは PIT) が発生
+2. SAVE_ALL が現在タスクの全レジスタを per-task カーネルスタックに退避
+3. `intr_enter` で k_nest をインクリメント
+4. C ハンドラが `sched_next_tsk(apic)` でタスクスイッチフラグを設定
+5. `intr_leave` で k_nest をデクリメント → 0 になった場合:
+   - 現在の ESP を `current_proc[cpu]->kern_esp` に保存
+   - `sched_next_tsk_check(cpu)` を呼び出し、`current_proc[cpu]` が新タスクに更新される
+   - 新タスクの `kern_esp` を ESP にロード → **ここがコンテキストスイッチ**
+   - `tss_update_esp0()` で TSS.esp0 を新タスクの `kern_stack_top` に更新
+6. RESTORE_ALL が新タスクのカーネルスタックからレジスタを pop
+7. `iret` が新タスクの EIP/CS/EFLAGS/ESP/SS で Ring 3 に復帰
+
+### Ring 0→Ring 0 割り込みの制約
+
+Ring 0 で割り込みが発生した場合、CPU は SS/ESP を push **しない**。
+そのため pt_regs フレームは 12 dword (48 バイト) になり、RESTORE_ALL + `iret` が
+想定する 14 dword フレームとは不整合が起きる。
+
+本カーネルでは Ring 0 で割り込みを許可しない設計で、この問題を回避している:
+- 全ハンドラスタブは `sti` を呼ばない
+- C ハンドラ内部でも `csti()` は使わない
+- `intr_leave` 内で push/call する際は k_nest > 0 のままであり、ネスト判定で安全
+
+### syscall 呼び出しフロー (klib.s 側)
 
 ```
-高アドレス
-+----------+
-| SS       |  +28
-+----------+
-| ESP      |  +24 → save がユーザー ESP として読み取る
-+----------+
-| EFLAGS   |  +20
-+----------+
-| CS       |  +16
-+----------+
-| EIP      |  +12 → save がユーザー EIP として読み取る
-+----------+
-| ret addr |  +8  (call save のリターンアドレス)
-+----------+
-| EBX      |  +4
-+----------+
-| EAX      |  +0  ← ESP
-+----------+
-低アドレス
+ユーザータスク:
+  cre_sem(1, &pk_csem)              lib/lib_sem.c
+    → syscall(TFN_CRE_SEM, ...)    lib/lib_sem.c (引数をスタックに push)
+      → int $0x99                   klib.s の syscall ルーチン
+
+klib.s syscall:
+    pushl   %ebp                    # caller の EBP を退避
+    movl    %esp, %ebp              # スタックフレーム確立
+    int     $0x99                   # ソフトウェア割り込み → intr_syscall
+    popl    %ebp                    # EBP 復帰
+    ret                             # EAX に戻り値
+
+ユーザースタック (int $0x99 時点):
+    [user_esp + 0]   saved EBP
+    [user_esp + 4]   return address
+    [user_esp + 8]   func_code (sysid)
+    [user_esp + 12]  arg1
+    [user_esp + 16]  arg2
+    ...
 ```
-
-### レジスタ退避領域 (proc.reg[]) のレイアウト
-
-```
-+48  old_stack_ptr (前回の stack ポインタ)
-+44  ES
-+40  DS
-+36  EBX
-+32  EAX
-+28  EFLAGS
-+24  EDI
-+20  ESI
-+16  EBP
-+12  EIP
-+8   ESP
-+4   EDX
-+0   ECX   ← stack ポインタが指す位置
-```
-
-1 フレームあたり 52 バイト (13 x 4)。割り込みがネストする場合、`stack` ポインタが 52 バイトずつ加算されて新しいフレームが確保される。
-
-### タスクスイッチの仕組み
-
-1. `restore` 内で `k_nest` が 0 になった場合、`sched_next_tsk_check(apic)` が呼ばれる
-2. スケジューラが次のタスクを選択すると、`current_proc[cpu]` が新しいプロセスに更新される
-3. `restore` は更新された `current_proc[cpu]` からレジスタを復帰する
-4. 新タスクの ESP と EIP が割り込みフレーム上に書き込まれるため、`iret` 実行時に新タスクのコンテキストに遷移する
-5. 結果的に、旧タスクの `save` で退避されたレジスタは `reg[]` に残り、旧タスクが次に実行される際に `restore` で復帰される
