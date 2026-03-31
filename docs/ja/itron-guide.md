@@ -355,7 +355,7 @@ c = (int)data;
 `VP_INT` は `int` の typedef なので、文字コードをそのまま整数として渡せる。
 
 kbd_task → first_task の転送にはメッセージバッファ (MBF) を使用する。
-詳細は [keyboard.md](../keyboard.md) セクション 7, 9 を参照。
+詳細は [keyboard.md](keyboard.md) セクション 7, 9 を参照。
 
 ---
 

@@ -90,7 +90,7 @@ gdb i386/_kernel
 (gdb) p shared_count          # semaphore-protected counter
 ```
 
-See [docs/gdb-debugging.md](docs/gdb-debugging.md) for detailed walkthrough.
+See [docs/gdb-debugging.md](docs/ja/gdb-debugging.md) for detailed walkthrough.
 
 ## Architecture
 
@@ -143,7 +143,7 @@ slp_tsk()
                                     -> iret  ----[gate]----> back to user
 ```
 
-See [docs/syscall.md](docs/syscall.md) for the complete trace.
+See [docs/syscall.md](docs/ja/syscall.md) for the complete trace.
 
 ### Context Switch
 
@@ -161,7 +161,7 @@ restore: decrements proc->stack by 52
 iret:   atomically restores CS:EIP, SS:ESP, EFLAGS -> new task runs
 ```
 
-See [docs/timer-interrupt.md](docs/timer-interrupt.md) and [docs/context-switch.md](docs/context-switch.md) for details.
+See [docs/timer-interrupt.md](docs/ja/timer-interrupt.md) and [docs/context-switch.md](docs/ja/context-switch.md) for details.
 
 ## Source Layout
 
