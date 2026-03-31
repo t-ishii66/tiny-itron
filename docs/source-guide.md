@@ -1,7 +1,6 @@
-# ソースコード読解ガイド
+# ソースコードガイド
 
-このドキュメントでは、tiny-itron のソースコード全体の構成と、
-効率的な読み進め方を説明する。
+tiny-itron のソースコード構成とファイルの役割を説明する。
 
 ---
 
@@ -105,80 +104,6 @@ tiny-itron/
 
 ---
 
-## 推奨する読み進め順
-
-### フェーズ 1: 全体像をつかむ (所要時間: 1-2 時間)
-
-**まず docs/ を読む:**
-
-1. `docs/system-overview.md` — タスク全体の動きと連携
-2. `docs/itron-guide.md` — ITRON API の概念
-3. `docs/memory-map.md` — メモリ配置
-4. `docs/i386-architecture.md` — GDT、IDT、特権レベル
-
-**次にユーザータスクのコードを読む:**
-
-5. `kernel/user.c` — 6 つのタスク関数。これが「アプリケーション」
-
-このフェーズで「何が動いているのか」を理解する。
-
-### フェーズ 2: ITRON カーネル層 (所要時間: 2-3 時間)
-
-**タスクのライフサイクルを追う:**
-
-6. `kernel/sys_tsk.c` — `sys_cre_tsk()` から読み始める。
-   `sys_slp_tsk()` → `sys_wup_tsk()` → `iwup_tsk()` の流れが核心
-7. `kernel/sched.c` — `sched_ins()` / `sched_do_next_tsk()` の優先度キュー
-
-**同期プリミティブ:**
-
-8. `kernel/sys_sem.c` — `sys_pol_sem()` / `sys_sig_sem()` (セマフォ)
-9. `kernel/sys_dtq.c` — `sys_psnd_dtq()` / `sys_prcv_dtq()` (データキュー)
-
-**メモリ管理:**
-
-10. `kernel/pool.c` — `pool_alloc()` / `pool_free()` の First-Fit アルゴリズム
-
-### フェーズ 3: ハードウェア層 (所要時間: 3-4 時間)
-
-**起動シーケンス (実行順に読む):**
-
-11. `i386/boot/boot.s` — フロッピーからの読み込み
-12. `i386/start.s` — リアルモード → プロテクトモード
-13. `i386/run.s` — 32 ビットエントリ、BSP/AP 分岐
-14. `i386/main.c` — カーネル初期化の起点
-
-**最重要ファイル — 割り込みとコンテキストスイッチ:**
-
-15. `i386/intr.s` — **SAVE_ALL/RESTORE_ALL** と **intr_enter/intr_leave** が OS の心臓部。
-    → 別ドキュメント `docs/context-switch.md` に詳細解説あり
-16. `i386/interrupt.c` — IDT 初期化と各 IRQ の C ハンドラ
-
-**プロセス管理:**
-
-17. `i386/proc.c` — タスクの初期レジスタ設定
-18. `i386/tss.c` — TSS 初期化 (esp0/ss0 の設定、動的更新)
-
-**SMP:**
-
-19. `i386/smp.c` — AP 起動、APIC 設定、スピンロック
-    → 別ドキュメント `docs/smp-basics.md` に詳細解説あり
-
-### フェーズ 4: syscall パス (所要時間: 1-2 時間)
-
-**ユーザーからカーネルへの接続:**
-
-20. `lib/lib_tsk.c` — `slp_tsk()` が `int $0x99` を発行する薄いラッパー
-21. `i386/syscall.c` — `c_intr_syscall()` がレジスタから引数を取り出す
-22. `kernel/syscall.c` — `itron_syscall()` が関数コードでディスパッチ
-
-**非 ITRON 拡張 syscall パス:**
-
-23. `lib/lib_exd.c` — `print_at()`, `set_key_task()` 等が `int $0x99` を発行 (TFN_EXD_xxx)
-24. `kernel/sys_exd.c` — VGA 書き込み、キーボード読み出し、スタック確保の実体
-
----
-
 ## 重要なデータ構造
 
 ### proc_t (i386/proc.h) — プロセス制御ブロック (HW 依存)
@@ -223,31 +148,9 @@ INT     next_tsk_flag[2];  // per-CPU: リスケジュール要求フラグ
 
 ---
 
-## コードを読む際のコツ
+## 補足
 
-### 1. 「上から下へ」と「呼び出しを追う」を切り替える
-
-トップダウン (main → all_init → 各ドライバ) で全体像を掴み、
-気になる関数はボトムアップ (SAVE_ALL → intr_leave → RESTORE_ALL の各行) で詳細を追う。
-
-### 2. GDB で動的に確認する
-
-```
-./run.sh -G          # QEMU を GDB モード起動
-gdb i386/_kernel_dbg
-(gdb) target remote :1234
-(gdb) break first_task
-(gdb) continue
-```
-
-変数確認:
-```
-(gdb) p tsk[1].tskstat    # タスク 1 の状態
-(gdb) p current_proc[0]   # CPU 0 の現在タスク
-(gdb) p task_count[1]     # Task 1 のループ回数
-```
-
-### 3. APIC ID パターンに注意する
+### `W apic` パターン
 
 多くの関数が第一引数に `W apic` を取る。これは CPU 番号 (0 or 1) で、
 per-CPU 配列のインデックスとして使われる:
@@ -255,12 +158,12 @@ per-CPU 配列のインデックスとして使われる:
 - `c_tskid[apic]` — その CPU の現在タスク ID
 - `next_tsk_flag[apic]` — リスケジュール要求
 
-### 4. 同名ヘッダに注意
+### 同名ヘッダ
 
 `kernel/types.h` と `include/types.h` は**別ファイル**。
 前者はカーネル内部構造体 (T_TSK, T_SEM 等)、後者は基本型 (W, H 等)。
 
-### 5. `sys_` と `i` プレフィックスの使い分け
+### `sys_` と `i` プレフィックス
 
 - `sys_slp_tsk()` — syscall ハンドラ (タスクコンテキスト)
 - `iwup_tsk()` — 割り込みハンドラから呼ぶ版 (割り込みコンテキスト)
