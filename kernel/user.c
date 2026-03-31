@@ -46,9 +46,9 @@
 
 /* -- shared state (inspect with GDB) -------------------------------------- */
 __attribute__((section(".user_data")))
-unsigned long shared_count = 0;		/* semaphore-protected counter */
+UW shared_count = 0;			/* semaphore-protected counter */
 __attribute__((section(".user_data")))
-unsigned long task_count[MAX_TSKID];	/* per-task run count */
+UW task_count[MAX_TSKID];		/* per-task run count */
 __attribute__((section(".user_data")))
 char spin_chars[] = { '|', '/', '-', '\\' };
 
@@ -91,7 +91,7 @@ __attribute__((section(".user_text")))
 static void
 delay(void)
 {
-	volatile unsigned long k;
+	volatile UW k;
 	for (k = 0; k < DELAY_COUNT; k++)
 		;
 }
@@ -215,8 +215,8 @@ first_task(void)
 
 	/* -- main loop: count up, alternate with Task 3 ------------------- */
 	while (1) {
-		char    mbf_buf[64];
-		ER_UINT mbf_ret;
+		char	mbf_buf[64];
+		ER_UINT	mbf_ret;
 
 		task_count[1]++;
 		if (task_count[1] >= COUNTER_WRAP) task_count[1] = 0;
@@ -232,9 +232,9 @@ first_task(void)
 		 * If no message: blocks for 20 ticks (~0.33s), returns E_TMOUT.
 		 * Either way, the timeout provides pacing (no busy-wait). */
 		mbf_ret = trcv_mbf(1, mbf_buf, 20);
-		if ((int)mbf_ret > 0) {
+		if ((INT)mbf_ret > 0) {
 			/* truncate to fit columns 36-79 (44 chars max) */
-			int len = (int)mbf_ret;
+			INT len = (INT)mbf_ret;
 			if (len > 80 - 36)
 				len = 80 - 36;
 			mbf_buf[len] = '\0';
@@ -242,7 +242,7 @@ first_task(void)
 			if (36 + len < 80)
 				fill_at(ROW_TASK1, 36 + len,
 					80 - 36 - len, ' ', ATTR_YELLOW);
-		} else if ((int)mbf_ret == 0) {
+		} else if ((INT)mbf_ret == 0) {
 			/* empty Enter: reset to initial display */
 			print_at(ROW_TASK1, 36, "-", ATTR_DARK);
 			fill_at(ROW_TASK1, 37, 80 - 37, ' ', ATTR_DARK);
@@ -260,8 +260,8 @@ __attribute__((section(".user_text")))
 void
 usr_main(VP_INT arg)
 {
-	int have_sem = 0;
-	int phase_cnt = 0;
+	INT have_sem = 0;
+	INT phase_cnt = 0;
 
 	slp_tsk();			/* wait for first wake from Task 1 */
 
@@ -332,11 +332,11 @@ __attribute__((section(".user_text")))
 void
 check_seg(void)
 {
-	short cs = get_cs();
-	short ds = get_ds();
-	short ss = get_ss();
-	unsigned long esp = get_esp();
-	unsigned long eflags = get_eflags();
+	H cs = get_cs();
+	H ds = get_ds();
+	H ss = get_ss();
+	UW esp = get_esp();
+	UW eflags = get_eflags();
 	printf("%x:%x:%x:%x:%x\n", cs, ds, ss, esp, eflags);
 }
 
@@ -370,8 +370,8 @@ second_task(void)
 
 	/* -- main loop: count up, compete for semaphore ------------------- */
 	{
-		int have_sem = 0;
-		int phase_cnt = 0;
+		INT have_sem = 0;
+		INT phase_cnt = 0;
 
 		while (1) {
 			task_count[2]++;
@@ -453,11 +453,11 @@ __attribute__((section(".user_text")))
 void
 kbd_task(VP_INT arg)
 {
-	int	c;
-	int	kbd_col = 20;		/* cursor column (start after "> ") */
-	int	kbd_max = 76;		/* wrap before screen edge */
-	int	line_pos = 0;		/* current position in line_buf */
-	int	key_cnt = 0;		/* keypress counter (for spinner) */
+	INT	c;
+	INT	kbd_col = 20;		/* cursor column (start after "> ") */
+	INT	kbd_max = 76;		/* wrap before screen edge */
+	INT	line_pos = 0;		/* current position in line_buf */
+	INT	key_cnt = 0;		/* keypress counter (for spinner) */
 	char	line_buf[64];		/* accumulates chars until Enter */
 	VP_INT	data;
 
@@ -466,7 +466,7 @@ kbd_task(VP_INT arg)
 
 	while (1) {
 		rcv_dtq(2, &data);	/* block until keyboard ISR sends a char */
-		c = (int)data;
+		c = (INT)data;
 
 		/* spinner: shows Task4 waking on each keypress */
 		key_cnt++;

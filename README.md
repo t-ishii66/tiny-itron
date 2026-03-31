@@ -1,14 +1,16 @@
+![](top.png)
 # tiny-itron
 
 [Micro ITRON 4.0](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) 仕様をベースにした、i386 向けのおもちゃの RTOS カーネル。SMP (2 CPU) 対応。
-2000年頃、趣味で作成したカーネルを github で公開できるようにいくつかの変更を実施。ドキュメンテーションはAIの Claude Codeに依頼しました。
-しかしそれを読むとかなり説明がくどく、同じことが繰り返されてるのですが逆にいうと、ドキュメントを全部読む必要はなく、
-１つまたはいくつかの資料だけで十分全体像が把握されると思います。ブートプロセスやマルチタスキングに関心のある方に何らかの形でお役に立てられれば幸いです。
+2000年頃、趣味で作成したカーネルを github で公開できるようにいくつかの変更を実施。ドキュメンテーションはAIの Claude Codeに依頼。
+おもちゃのカーネルですが、　QEMU仮想環境ですぐ試していただけます。ブートプロセスやマルチタスキングに関心のある方に何らかの形でお役に立てられれば幸いです。
+
+![](screenshot.png)
 
 ## このプロジェクトの目的
 
 OS の仕組みは、ほとんどの人が教科書で学ぶ。
-このプロジェクトは、**実際のカーネルコードを読んで動かすことで学ぶ** ためにある。
+このプロジェクトは、**実際のカーネルコードを遊びながら動かして学ぶ** ためにある。
 
 tiny-itron は Micro ITRON 4.0 のタスク・セマフォ・イベントフラグといった API スタイルを
 借りているが、仕様を忠実に・完全に実装することは目指していない。
@@ -29,9 +31,10 @@ syscall をユーザ空間からカーネルまでたどれば、すべての命
   ページング、PIC・APIC の初期化を経て、最初のユーザタスクが Ring 3 で
   動き出すまで。すべてのステップがソースコードに存在し、ドキュメント化されている。
 
-- **ベアメタル上のマルチタスキング** —— アセンブリの `save`/`restore` が
-  13 個のレジスタを保存・復元してタスクを切り替える仕組み、
-  スケジューラが次のタスクを選ぶ方法、2 つの CPU がスピンロックで協調する方法、
+- **ベアメタル上のマルチタスキング** —— `SAVE_ALL`/`RESTORE_ALL` マクロが
+  per-task カーネルスタック上に 9 個のレジスタを保存・復元してタスクを切り替える仕組み、
+  `intr_leave` が ESP を差し替えるだけでコンテキストスイッチする方法、
+  2 つの CPU がスピンロックで協調する方法、
   キーボード割り込みが実行中のタスクをプリエンプトする仕組み。
   これらすべてを GDB でリアルタイムに観察できる。
 
@@ -45,37 +48,68 @@ syscall をユーザ空間からカーネルまでたどれば、すべての命
 カーネルを実行すると、QEMU に VGA テキストモードの画面が表示される:
 
 ```
-  TinyItron/386 SMP (2 CPU)                            [Ctrl+C to quit]
+  TinyITRON/386 SMP (2 CPU)                            [Ctrl+C to quit]
   ============================================================================
 
       Timer  tick = 12345
 
-  [CPU0] Task1 #     142     dtq: a
-  [CPU0] Task3 #      71     LOCK
-           Shared (sem 1)    #      38
-  [CPU1] Task2 #     284     BUSY
-  [CPU1] Task4 > hello world
+  [CPU0] Task1 # |  142     mbf: hello world
+  [CPU0] Task3 # /   71     [LOCK]---+
+           +---> Shared (sem 1)      #      38
+  [CPU1] Task2 # -  284     BUSY
+  [CPU1] Task4 > hello world_
+
+                       .---------.             .---------.
+                       |  CPU 0  |             |  CPU 1  |
+                       | Task1,3 |---[ BKL ]---| Task2,4 |
+                       |  Idle5  |             |  Idle6  |
+                       '---------'             '---------'
+                            \                     /
+                             '--- Shared Memory --'
+
+  Copyright (c) 2000-2026 t-ishii66. All rights reserved.
 ```
 
 - **Task 1** と **Task 3** が CPU 0 上で `wup_tsk`/`slp_tsk` により交互に実行
 - **Task 2** は CPU 1 上で継続的に実行
 - **Task 3** (CPU 0) と **Task 2** (CPU 1) がバイナリセマフォで共有カウンタを
   競合アクセス —— LOCK/BUSY の状態がリアルタイムに表示される
-- **Task 4** は最高優先度でキーボード入力をエコーし、Task 2 をプリエンプトする
+- **Task 4** は最高優先度でキーボード入力をエコーし、Task 2 をプリエンプトする。
+  Enter でメッセージバッファ (MBF) 経由で Task 1 に行文字列を送信
 - **Timer tick** は CPU 0 上の PIT (IRQ0) で駆動
+- 画面下部に **SMP アーキテクチャ図**: 2 CPU 構成と BKL (Big Kernel Lock)、
+  共有メモリバスの関係を表示
+
+## 環境構築
+
+Ubuntu 24.04 LTS (amd64) で動作確認している。
+
+```bash
+# ビルドツール (GCC, Make) + 32 ビットサポート
+sudo apt install build-essential gcc-multilib
+
+# エミュレータ
+sudo apt install qemu-system-x86
+
+# デバッガ (任意)
+sudo apt install gdb
+```
+
+詳しくは [docs/build-system.md](docs/ja/build-system.md) を参照。
 
 ## ビルドと実行
 
-**必要なもの:** GCC (i386 クロスまたはネイティブ 32 ビット)、GNU Make、QEMU (`qemu-system-i386`)
-
 ```bash
 # ビルド
-make -C kernel && make -C lib && make -C i386
+make
 
 # QEMU で実行 (2 CPU)
 ./run.sh          # curses モード (ターミナル上に VGA テキスト表示、Ctrl+C で終了)
 ./run.sh -g       # GTK ウィンドウモード (Ctrl+Alt+G でグラブ解除)
 ./run.sh -G       # GDB モード (ポート 1234 で接続待ち)
+
+# クリーンビルド
+make clean && make
 ```
 
 ## GDB デバッグ
@@ -85,7 +119,7 @@ make -C kernel && make -C lib && make -C i386
 ./run.sh -G
 
 # ターミナル 2
-gdb i386/_kernel
+gdb i386/_kernel_dbg
 (gdb) set architecture i386
 (gdb) target remote :1234
 (gdb) break first_task
@@ -95,7 +129,7 @@ gdb i386/_kernel
 (gdb) p shared_count          # セマフォで保護された共有カウンタ
 ```
 
-詳しくは [docs/gdb-debugging.md](docs/gdb-debugging.md) を参照。
+詳しくは [docs/gdb-debugging.md](docs/ja/gdb-debugging.md) を参照。
 
 ## アーキテクチャ
 
@@ -139,34 +173,38 @@ gdb i386/_kernel
 slp_tsk()
   -> syscall(0x11)
     -> int $0x99  ----[gate]---->  intr_syscall
-                                    -> save (regs -> proc.reg[])
-                                    -> c_intr_syscall
+                                    -> SAVE_ALL (9 regs → per-task kernel stack)
+                                    -> intr_enter (k_nest++)
+                                    -> c_intr_syscall(pt_regs*)
                                       -> itron_syscall
                                         -> syscall_entry[0x11] = sys_slp_tsk
-                                    -> 戻り値をセーブフレームに書き込み
-                                    -> restore (タスク切替の可能性あり)
+                                    -> regs->eax = 戻り値
+                                    -> intr_leave (k_nest--, タスクスイッチ判定)
+                                    -> RESTORE_ALL (9 regs pop)
                                     -> iret  ----[gate]----> ユーザに復帰
 ```
 
-詳しくは [docs/syscall.md](docs/syscall.md) を参照。
+詳しくは [docs/syscall.md](docs/ja/syscall.md) を参照。
 
 ### コンテキストスイッチ
 
 ```
-save:    APIC ID を読み取り → CPU ごとの current_proc[] を選択
-         proc->stack を 52 バイト進める (13 レジスタ × 4)
-         ECX,EDX,ESP,EIP,EBP,ESI,EDI,EFLAGS,EAX,EBX,DS,ES を保存
+SAVE_ALL:    全割り込み/syscall の先頭で実行
+             EAX,ECX,EDX,EBX,EBP,ESI,EDI,DS,ES を per-task カーネルスタックに push
 
-restore: proc->stack を 52 バイト戻す
-         ネストカウント == 0 なら: sched_next_tsk_check() を呼ぶ
-           → current_proc[] が別のタスクに変わる可能性あり
-         (別のタスクかもしれない) セーブ領域からレジスタを復元
-         iret フレームを新タスクの EIP/ESP で上書き
+intr_leave:  最外の割り込みから戻るときのみ実行 (k_nest == 0)
+             current_proc[cpu]->kern_esp = ESP   (現タスクの ESP を保存)
+             sched_next_tsk_check(cpu)           (タスクスイッチ判定)
+             ESP = current_proc[cpu]->kern_esp   (新タスクの ESP をロード)
+             tss_update_esp0()                   (TSS.esp0 を新タスクに更新)
 
-iret:    CS:EIP, SS:ESP, EFLAGS をアトミックに復元 → 新タスクが実行開始
+RESTORE_ALL: ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX を pop
+             → 新タスクのカーネルスタックから復元されるため、タスクが切り替わる
+
+iret:        CS:EIP, SS:ESP, EFLAGS をアトミックに復元 → 新タスクが Ring 3 で実行開始
 ```
 
-詳しくは [docs/timer-interrupt.md](docs/timer-interrupt.md) および [docs/context-switch.md](docs/context-switch.md) を参照。
+詳しくは [docs/context-switch.md](docs/ja/context-switch.md) を参照。
 
 ## ソース構成
 
@@ -175,56 +213,70 @@ i386/           アーキテクチャ依存コード
   boot/           ブートセクタ (boot.s) とローダテーブル
   start.s         リアルモード → プロテクトモード遷移
   main.c          カーネルエントリポイント、初期化シーケンス
-  intr.s          save/restore、全割り込み/例外/syscall スタブ
-  klib.s          syscall ラッパー、TSS タスク起動、I/O ポートヘルパ
-  proc.c          タスク proc_t 管理、CPU アフィニティ
-  interrupt.c     IDT セットアップ、PIC 初期化、sched_next_tsk_check
-  page.c          ページディレクトリ/テーブル設定 (恒等写像)
+  intr.s          SAVE_ALL/RESTORE_ALL、全割り込み/例外/syscall エントリ
+  klib.s          start_first/second_task、I/O ポートヘルパ、スピンロック
+  proc.c          タスク proc_t 管理、偽 pt_regs フレーム構築、CPU アフィニティ
+  interrupt.c     IDT セットアップ、IRQ/例外/syscall ハンドラ登録
+  page.c          ページディレクトリ/テーブル設定 (恒等写像、U/S アクセス制御)
   smp.c           AP 起動 (INIT/SIPI)、Local APIC タイマー
-  syscall.c       c_intr_syscall (戻り値書き戻し)
+  syscall.c       c_intr_syscall (pt_regs* から引数読み出し、戻り値書き戻し)
   video.c         VGA テキストモードドライバ (0xB8000)
-  keyboard.c      PS/2 キーボードドライバ、リングバッファ、IRQ1
+  keyboard.c      PS/2 キーボードドライバ、IRQ1
   timer.c         PIT (8254) 初期化
-  tss.c           TSS ディスクリプタ設定
+  tss.c           TSS 初期化、動的 esp0 更新
 
 kernel/         アーキテクチャ非依存 ITRON カーネル
   syscall.c       itron_syscall ディスパッチャ
-  syscallP.h      syscall_entry[] ディスパッチテーブル (234 エントリ)
+  syscallP.h      syscall_entry[] ディスパッチテーブル
   sys_tsk.c       タスク管理 (cre/act/slp/wup/ter_tsk, ...)
   sys_sem.c       セマフォ (cre/sig/wai/pol_sem)
   sys_flg.c       イベントフラグ
-  sys_dtq.c       データキュー
+  sys_dtq.c       データキュー (リングバッファ)
+  sys_mbf.c       メッセージバッファ
   sys_mbx.c       メールボックス
   sys_exd.c       拡張 syscall (VGA、キーボード、スタック確保)
-  sched.c         優先度ベーススケジューラ、レディキュー
-  pool.c          メモリプール (スタック確保)
-  user.c          デモ用ユーザタスク (first_task, second_task, kbd_task)
+  sched.c         優先度ベーススケジューラ、レディキュー、タイムアウトキュー
+  pool.c          メモリプール (スタック / ユーザメモリ / カーネルメモリ)
+  user.c          デモ用ユーザタスク (first_task, second_task, usr_main, kbd_task)
 
 lib/            ユーザ空間ライブラリ (.user_text にリンク)
   lib_tsk.c       タスク管理ラッパー (cre_tsk, slp_tsk, ...)
   lib_sem.c       セマフォ/フラグ/DTQ/メールボックスラッパー
-  lib_exd.c       拡張 syscall ラッパー (print_at, key_read, ...)
+  lib_mbf.c       メッセージバッファラッパー
+  lib_exd.c       拡張 syscall ラッパー (print_at, set_key_task, ...)
 
 include/        共有ヘッダ
   itron.h         ITRON 型定義、エラーコード、TFN_* 関数コード
   config.h        カーネル制限 (MAX_TSKID=16, TMAX_TPRI=16, ...)
+  exd.h           非 ITRON 拡張 API プロトタイプ
 
-docs/           ドキュメント (日本語)
-  system-overview.md    アーキテクチャ概要
-  syscall.md            syscall 処理フロー (ユーザ → カーネル → 復帰)
-  timer-interrupt.md    タイマー割り込みと save/restore の詳細
-  context-switch.md     コンテキストスイッチの仕組み
-  memory-map.md         物理メモリ配置
-  build-system.md       ビルドプロセスとリンカスクリプト
-  boot-sector.md        ブートセクタとフロッピーロード
-  smp-basics.md         SMP 起動と APIC 設定
-  i386-architecture.md  GDT、IDT、TSS、ページング
-  itron-guide.md        ITRON API 入門
-  gdb-debugging.md      GDB デバッグガイド
-  vga-text-mode.md      VGA テキストモードプログラミング
-  source-guide.md       ソースファイルリファレンス
-  refs/                 ファイルごとのリファレンスドキュメント
+docs/
+  ja/             ドキュメント (日本語)
+  en/             ドキュメント (英語、準備中)
 ```
+
+## ドキュメント
+
+すべて日本語 (`docs/ja/`)。`docs/ja/refs/` にはファイルごとの詳細リファレンスもある。
+
+| ドキュメント | 内容 |
+|---|---|
+| [system-overview.md](docs/ja/system-overview.md) | アーキテクチャ概要 — 全体像を最初に読む |
+| [i386-architecture.md](docs/ja/i386-architecture.md) | GDT、IDT、TSS、PIC、ページング — i386 ハードウェア基礎 |
+| [build-system.md](docs/ja/build-system.md) | ビルドプロセス、リンカスクリプト、環境構築 |
+| [boot-sector.md](docs/ja/boot-sector.md) | ブートセクタとフロッピーロード |
+| [memory-map.md](docs/ja/memory-map.md) | 物理メモリ配置 |
+| [context-switch.md](docs/ja/context-switch.md) | SAVE_ALL/RESTORE_ALL とコンテキストスイッチの仕組み |
+| [syscall.md](docs/ja/syscall.md) | syscall 処理フロー (ユーザ → カーネル → 復帰) |
+| [timer-interrupt.md](docs/ja/timer-interrupt.md) | タイマー割り込みと SAVE_ALL/RESTORE_ALL の詳細 |
+| [smp-basics.md](docs/ja/smp-basics.md) | SMP 起動、APIC 設定、per-CPU データ |
+| [itron-guide.md](docs/ja/itron-guide.md) | ITRON API 入門 |
+| [keyboard.md](docs/ja/keyboard.md) | キーボードドライバと DTQ/MBF パイプライン |
+| [timeout.md](docs/ja/timeout.md) | タイムアウト機構 (tslp_tsk, trcv_dtq, twai_sem) |
+| [vga-text-mode.md](docs/ja/vga-text-mode.md) | VGA テキストモードプログラミング |
+| [gdb-debugging.md](docs/ja/gdb-debugging.md) | GDB デバッグガイド |
+| [source-guide.md](docs/ja/source-guide.md) | ソースファイルリファレンス |
+| [docs/refs/](docs/ja/refs/) | ファイルごとの詳細リファレンス |
 
 ## ITRON syscall 対応状況
 
@@ -232,11 +284,13 @@ docs/           ドキュメント (日本語)
 |-------------------|--------------------------------------------------------|---------------|
 | タスク管理        | cre_tsk, act_tsk, slp_tsk, wup_tsk, ter_tsk, chg_pri  | 動作確認済み  |
 | タスク管理        | tslp_tsk, ext_tsk, exd_tsk, sus_tsk                    | 実装あり      |
-| セマフォ          | cre_sem, sig_sem, wai_sem, pol_sem                     | 動作確認済み  |
+| セマフォ          | cre_sem, sig_sem, wai_sem, pol_sem, twai_sem           | 動作確認済み  |
 | イベントフラグ    | cre_flg, set_flg, wai_flg, pol_flg                     | 実装あり      |
-| データキュー      | cre_dtq, snd_dtq, psnd_dtq, prcv_dtq                  | 動作確認済み  |
+| データキュー      | cre_dtq, snd_dtq, psnd_dtq, ipsnd_dtq, rcv_dtq, trcv_dtq | 動作確認済み  |
+| メッセージバッファ | cre_mbf, psnd_mbf, trcv_mbf                           | 動作確認済み  |
 | メールボックス    | cre_mbx, snd_mbx, rcv_mbx                              | 実装あり      |
-| 拡張 (独自)       | print_at, key_read, clear_screen, tsk_stack_alloc          | 動作確認済み  |
+| タイマー          | dly_tsk (tslp_tsk ベース)                              | 動作確認済み  |
+| 拡張 (独自)       | print_at, set_key_task, clear_screen, tsk_stack_alloc  | 動作確認済み  |
 
 「動作確認済み」= 実行デモで検証済み。「実装あり」= コードは存在するが十分なテストは未実施。
 

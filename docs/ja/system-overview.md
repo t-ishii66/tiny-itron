@@ -854,7 +854,7 @@ CPU 1 の APIC タイマーも EOI のみ (`c_intr_smp_timer1`)。
 
 定常動作中の画面 ([LOCK] 表示タイミングのスクリーンショット):
 
-![screenshot](../screenshot.png)
+![screenshot](../../screenshot.png)
 
 ```
   Row:

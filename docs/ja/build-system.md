@@ -4,7 +4,48 @@ tiny-itron のビルドからフロッピーイメージ作成までの全工程
 
 ---
 
+## 開発環境
+
+Ubuntu 24.04 LTS (amd64) で開発・動作確認している。
+
+### 必要なパッケージ
+
+```bash
+# ビルドツール (GCC, GNU Make, binutils)
+# gcc-multilib: 64 ビット OS 上で 32 ビット (-m32) コードを生成するために必要
+sudo apt install build-essential gcc-multilib
+
+# エミュレータ
+sudo apt install qemu-system-x86
+
+# デバッガ (任意)
+sudo apt install gdb
+```
+
+### 確認済みバージョン
+
+| ツール | バージョン |
+|--------|-----------|
+| GCC | 13.3.0 |
+| GNU Make | 4.3 |
+| QEMU | 8.2.2 |
+| GDB | 15.0 |
+
+> **注:** GCC はデフォルトで `cmov` 等の Pentium Pro 以降の命令を生成する。
+> QEMU の `-cpu` オプションは `pentium3` 以上が必要 (`-cpu 486` は不可)。
+> `run.sh` がこのオプションを自動設定する。
+
+---
+
 ## ビルドコマンド
+
+```bash
+make                # 全体ビルド (kernel → lib → i386 の順)
+make clean          # 全体クリーン
+```
+
+トップレベルの `Makefile` が 3 つのサブディレクトリを正しい順序で呼び出す。
+個別にビルドする場合:
 
 ```bash
 make -C kernel      # カーネルライブラリ (libkernel.a)
