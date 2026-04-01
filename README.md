@@ -1,174 +1,188 @@
-![](top.png)
+<img src="top.png" width="800">
+
 # tiny-itron
 
-[Micro ITRON 4.0](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) 仕様をベースにした、i386 向けのおもちゃの RTOS カーネル。SMP (2 CPU) 対応。
-2000年頃、趣味で作成したカーネルを github で公開できるようにいくつかの変更を実施。ドキュメンテーションはAIの Claude Codeに依頼。
-おもちゃのカーネルですが、　QEMU仮想環境ですぐ試していただけます。ブートプロセスやマルチタスキングに関心のある方に何らかの形でお役に立てられれば幸いです。
+**Japanese version: [README-ja.md](README-ja.md)**
+
+A toy RTOS kernel for i386 based on the [Micro ITRON 4.0](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Supports SMP (2 CPUs).
+Originally created around 2000 as a hobby project; several changes were made to publish the kernel on GitHub.
+It's a toy kernel, but you can try it immediately in a QEMU virtual environment. If you're looking for a textbook-style kernel study, this project may not have much to offer. However, if you enjoy programming and are interested in gaining an intuitive understanding of the boot process and multitasking, we hope this can be of help.
+AI was used to create the documentation. We believe it was generated mostly correctly, but there may be places where the explanation is insufficient and slipped through review. In that case, try asking your own AI to analyze the source code directly — that will likely give you the correct answer.
 
 ![](screenshot.png)
 
-## このプロジェクトの目的
+## Purpose of This Project
 
-OS の仕組みは、ほとんどの人が教科書で学ぶ。
-このプロジェクトは、**実際のカーネルコードを遊びながら動かして学ぶ** ためにある。
+Most people learn how operating systems work from textbooks.
+This project exists to **learn by playing with and running actual kernel code**.
 
-tiny-itron は Micro ITRON 4.0 のタスク・セマフォ・イベントフラグといった API スタイルを
-借りているが、仕様を忠実に・完全に実装することは目指していない。
-多くの ITRON syscall はスタブのままであり、内部アーキテクチャも
-簡潔さを優先して仕様から自由に逸脱している。これはおもちゃのカーネルである
-——そして、それこそが利点である。
+tiny-itron borrows the API style of Micro ITRON 4.0 — tasks, semaphores, event flags, and so on —
+but does not aim to faithfully or completely implement the specification.
+Many ITRON syscalls remain as stubs, and the internal architecture
+freely deviates from the specification in favor of simplicity.
+This is a toy kernel — and that is precisely its advantage.
 
-小さいこと (C とアセンブリ合わせて約 8,000 行) は、システム全体を頭の中に
-収められることを意味する。ハードウェアを隠す抽象化レイヤは存在しない。
-syscall をユーザ空間からカーネルまでたどれば、すべての命令が見える。
-スケジューラに `printk` を 1 行足してリブートすれば、数秒で結果がわかる。
+Being small (approximately 8,000 lines of C and assembly combined) means you can
+hold the entire system in your head. There is no abstraction layer hiding the hardware.
+Trace a syscall from user space to the kernel, and every instruction is visible.
+Add a single `printk` line to the scheduler and reboot — you'll see the result in seconds.
 
-このプロジェクトが焦点を当てるのは、教科書が理論として説明はするが
-なかなか **手を動かして触らせてくれない** 2 つのテーマである:
+This project focuses on two themes that textbooks explain in theory
+but rarely let you **get your hands on**:
 
-- **ブートプロセス** —— BIOS が 512 バイトのブートセクタをロードするところから、
-  リアルモード→プロテクトモード遷移、GDT/IDT/TSS のセットアップ、
-  ページング、PIC・APIC の初期化を経て、最初のユーザタスクが Ring 3 で
-  動き出すまで。すべてのステップがソースコードに存在し、ドキュメント化されている。
+- **The boot process** — from the BIOS loading the 512-byte boot sector,
+  through real mode → protected mode transition, GDT/IDT/TSS setup,
+  paging, and PIC/APIC initialization, all the way to the first user task
+  starting in Ring 3. Every step exists in the source code and is documented.
 
-- **ベアメタル上のマルチタスキング** —— `SAVE_ALL`/`RESTORE_ALL` マクロが
-  per-task カーネルスタック上に 9 個のレジスタを保存・復元してタスクを切り替える仕組み、
-  `intr_leave` が ESP を差し替えるだけでコンテキストスイッチする方法、
-  2 つの CPU がスピンロックで協調する方法、
-  キーボード割り込みが実行中のタスクをプリエンプトする仕組み。
-  これらすべてを GDB でリアルタイムに観察できる。
+- **Bare-metal multitasking** — how the `SAVE_ALL`/`RESTORE_ALL` macros
+  save and restore 9 registers on per-task kernel stacks to switch tasks,
+  how `intr_leave` performs a context switch by simply swapping ESP,
+  how two CPUs coordinate via spinlocks,
+  and how a keyboard interrupt preempts a running task.
+  All of this can be observed in real time with GDB.
 
-目標はプロダクション品質ではない。目標は、すべての定数に理由があり、
-すべてのレジスタ保存に *なぜそうするか* のコメントがあり、
-ユーザ空間からハードウェアまでのあらゆる経路を `grep` と `gdb` だけで
-追跡できることである。
+The goal is not production quality. The goal is that every constant has a reason,
+every register save has a comment explaining *why*,
+and every path from user space to hardware can be traced
+with nothing but `grep` and `gdb`.
 
-## 動作画面
+## Screen Output
 
-カーネルを実行すると、QEMU に VGA テキストモードの画面が表示される:
+When the kernel runs, a VGA text mode screen is displayed in QEMU:
 
 ```
   TinyITRON/386 SMP (2 CPU)                            [Ctrl+C to quit]
   ============================================================================
 
-      Timer  tick = 12345
+    Timer         tick =         12345
 
-  [CPU0] Task1 # |  142     mbf: hello world
-  [CPU0] Task3 # /   71     [LOCK]---+
-           +---> Shared (sem 1)      #      38
-  [CPU1] Task2 # -  284     BUSY
-  [CPU1] Task4 > hello world_
+  [CPU0] Task1 |  #       142     mbf: hello world
 
-                       .---------.             .---------.
-                       |  CPU 0  |             |  CPU 1  |
-                       | Task1,3 |---[ BKL ]---| Task2,4 |
-                       |  Idle5  |             |  Idle6  |
-                       '---------'             '---------'
-                            \                     /
-                             '--- Shared Memory --'
+  [CPU0] Task3 /  #        71     [LOCK]---+
+                                            \
+                                             +---> Shared (sem 1)    #       38
+
+  [CPU1] Task2 -  #       284     [BUSY]---+
+
+  [CPU1] Task4    > hello world_
+
+
+                      .---------.             .---------.
+                      |  CPU 0  |             |  CPU 1  |
+                      | Task1,3 |---[ BKL ]---| Task2,4 |
+                      |  Idle5  |             |  Idle6  |
+                      '---------'             '---------'
+                           \                     /
+                            '--- Shared Memory --'
 
   Copyright (c) 2000-2026 t-ishii66. All rights reserved.
 ```
 
-- **Task 1** と **Task 3** が CPU 0 上で `wup_tsk`/`slp_tsk` により交互に実行
-- **Task 2** は CPU 1 上で継続的に実行
-- **Task 3** (CPU 0) と **Task 2** (CPU 1) がバイナリセマフォで共有カウンタを
-  競合アクセス —— LOCK/BUSY の状態がリアルタイムに表示される
-- **Task 4** は最高優先度でキーボード入力をエコーし、Task 2 をプリエンプトする。
-  Enter でメッセージバッファ (MBF) 経由で Task 1 に行文字列を送信
-- **Timer tick** は CPU 0 上の PIT (IRQ0) で駆動
-- 画面下部に **SMP アーキテクチャ図**: 2 CPU 構成と BKL (Big Kernel Lock)、
-  共有メモリバスの関係を表示
+- **Task 1** and **Task 3** alternate on CPU 0 via `wup_tsk`/`slp_tsk`
+- **Task 2** runs continuously on CPU 1
+- **Task 3** (CPU 0) and **Task 2** (CPU 1) compete for a binary semaphore
+  to access a shared counter — LOCK/BUSY status is displayed in real time
+- **Task 4** has the highest priority and echoes keyboard input, preempting Task 2.
+  On Enter, it sends a line string to Task 1 via a message buffer (MBF)
+- **Timer tick** is driven by the PIT (IRQ0) on CPU 0
+- The bottom of the screen shows an **SMP architecture diagram**: the 2-CPU configuration,
+  BKL (Big Kernel Lock), and shared memory bus
 
-## 環境構築
+## Prerequisites
 
-Ubuntu 24.04 LTS (amd64) で動作確認している。
+Verified on Ubuntu 24.04 LTS (amd64).
 
 ```bash
-# ビルドツール (GCC, Make) + 32 ビットサポート
+# Build tools (GCC, Make) + 32-bit support
 sudo apt install build-essential gcc-multilib
 
-# エミュレータ
+# Emulator
 sudo apt install qemu-system-x86
 
-# デバッガ (任意)
+# Debugger (optional)
 sudo apt install gdb
 ```
 
-詳しくは [docs/build-system.md](docs/ja/build-system.md) を参照。
+See [docs/en/build-system.md](docs/en/build-system.md) for details.
 
-## ビルドと実行
+## Build and Run
 
 ```bash
-# ビルド
+# Build
 make
 
-# QEMU で実行 (2 CPU)
-./run.sh          # curses モード (ターミナル上に VGA テキスト表示、Ctrl+C で終了)
-./run.sh -g       # GTK ウィンドウモード (Ctrl+Alt+G でグラブ解除)
-./run.sh -G       # GDB モード (ポート 1234 で接続待ち)
+# Run in QEMU (2 CPUs)
+./run.sh          # curses mode (VGA text on terminal, Ctrl+C to quit)
+./run.sh -g       # GTK window mode (Ctrl+Alt+G to release grab)
+./run.sh -G       # GDB mode (waits for connection on port 1234)
 
-# クリーンビルド
+# Clean build
 make clean && make
 ```
 
-## GDB デバッグ
+## GDB Debugging
 
 ```bash
-# ターミナル 1
+# Terminal 1
 ./run.sh -G
 
-# ターミナル 2
+# Terminal 2
 gdb i386/_kernel_dbg
 (gdb) set architecture i386
+(gdb) directory i386 kernel lib
 (gdb) target remote :1234
 (gdb) break first_task
 (gdb) continue
-(gdb) info threads            # 両方の CPU が見える
-(gdb) p task_count[1]         # Task 1 の実行回数
-(gdb) p shared_count          # セマフォで保護された共有カウンタ
+(gdb) info threads            # Both CPUs are visible
+(gdb) p task_count[1]         # Task 1 run count
+(gdb) p shared_count          # Semaphore-protected shared counter
 ```
 
-詳しくは [docs/gdb-debugging.md](docs/ja/gdb-debugging.md) を参照。
+See [docs/en/gdb-debugging.md](docs/en/gdb-debugging.md) for details.
 
-## アーキテクチャ
+## Architecture
 
-### ハードウェアスタック
+### Hardware Initialization Flow
+
+The kernel initializes the following hardware features in order during boot:
 
 ```
-+---------------------+
-|  ブートセクタ (512B) |  BIOS INT 13h でフロッピーからカーネルをロード
-+---------------------+
-|  GDT / IDT / TSS    |  プロテクトモード設定、セグメントディスクリプタ
-+---------------------+
-|  PIC (i8259)         |  IRQ ルーティング —— 外部 IRQ はすべて CPU 0 に配送
-+---------------------+
-|  Local APIC          |  CPU 識別、CPU ごとのタイマー、EOI
-+---------------------+
-|  ページング          |  恒等写像、User/Supervisor アクセス制御
-+---------------------+
+BIOS
+  ↓  Load kernel from floppy via INT 13h
+Boot sector (boot.s)
+  ↓  Real mode → protected mode transition
+GDT / IDT / TSS (start.s, interrupt.c, tss.c)
+  ↓  Segments, interrupt gates, task state segment
+PIC i8259 (interrupt.c)
+  ↓  IRQ routing: all external IRQs delivered to CPU 0 only
+Local APIC (smp.c)
+  ↓  CPU identification (APIC ID), per-CPU timer, EOI
+Paging (page.c)
+  ↓  Identity mapping, User/Supervisor access control
+Kernel startup → first user task (Ring 3)
 ```
 
-### 特権モデル
+### Privilege Model
 
-| Ring | CS     | DS     | SS     | 役割             |
+| Ring | CS     | DS     | SS     | Role             |
 |------|--------|--------|--------|------------------|
-| 0    | 0x20   | 0x28   | 0x30   | カーネル         |
-| 3    | 0x5B   | 0x63   | 0x6B   | ユーザタスク     |
+| 0    | 0x20   | 0x28   | 0x30   | Kernel           |
+| 3    | 0x5B   | 0x63   | 0x6B   | User tasks       |
 
-### SMP 設計
+### SMP Design
 
-- **2 CPU**: BSP (CPU 0) + AP (CPU 1)、Local APIC ID で識別
-- **AP 起動**: INIT IPI + SIPI シーケンス、AP がプロテクトモードに再突入
-- **タイマー**: PIT (IRQ0、CPU 0 のみ) + Local APIC タイマー (両 CPU)
-- **スピンロック**: `xchgl` ベース (Ring 3 から使用可能、`cli`/`sti` 不要)
-- **CPU アフィニティ**: 各タスクは CPU に固定、スケジューラがアフィニティでフィルタ
-- **I/O APIC なし**: 意図的な簡略化。PIC がすべての外部 IRQ を処理
+- **2 CPUs**: BSP (CPU 0) + AP (CPU 1), identified by Local APIC ID
+- **AP startup**: INIT IPI + SIPI sequence, AP re-enters protected mode
+- **Timers**: PIT (IRQ0, CPU 0 only) + Local APIC timer (both CPUs)
+- **Spinlocks**: `xchgl`-based (usable from Ring 3, no `cli`/`sti` needed)
+- **CPU affinity**: each task is pinned to a CPU, scheduler filters by affinity
+- **No I/O APIC**: intentional simplification. PIC handles all external IRQs
 
-### syscall パス
+### Syscall Path
 
 ```
-ユーザタスク        Ring 3              Ring 0
+User task           Ring 3              Ring 0
 ──────────          ──────              ──────
 slp_tsk()
   -> syscall(0x11)
@@ -178,151 +192,150 @@ slp_tsk()
                                     -> c_intr_syscall(pt_regs*)
                                       -> itron_syscall
                                         -> syscall_entry[0x11] = sys_slp_tsk
-                                    -> regs->eax = 戻り値
-                                    -> intr_leave (k_nest--, タスクスイッチ判定)
+                                    -> regs->eax = return value
+                                    -> intr_leave (k_nest--, task switch decision)
                                     -> RESTORE_ALL (9 regs pop)
-                                    -> iret  ----[gate]----> ユーザに復帰
+                                    -> iret  ----[gate]----> return to user
 ```
 
-詳しくは [docs/syscall.md](docs/ja/syscall.md) を参照。
+See [docs/en/syscall.md](docs/en/syscall.md) for details.
 
-### コンテキストスイッチ
-
-```
-SAVE_ALL:    全割り込み/syscall の先頭で実行
-             EAX,ECX,EDX,EBX,EBP,ESI,EDI,DS,ES を per-task カーネルスタックに push
-
-intr_leave:  最外の割り込みから戻るときのみ実行 (k_nest == 0)
-             current_proc[cpu]->kern_esp = ESP   (現タスクの ESP を保存)
-             sched_next_tsk_check(cpu)           (タスクスイッチ判定)
-             ESP = current_proc[cpu]->kern_esp   (新タスクの ESP をロード)
-             tss_update_esp0()                   (TSS.esp0 を新タスクに更新)
-
-RESTORE_ALL: ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX を pop
-             → 新タスクのカーネルスタックから復元されるため、タスクが切り替わる
-
-iret:        CS:EIP, SS:ESP, EFLAGS をアトミックに復元 → 新タスクが Ring 3 で実行開始
-```
-
-詳しくは [docs/context-switch.md](docs/ja/context-switch.md) を参照。
-
-## ソース構成
+### Context Switch
 
 ```
-i386/           アーキテクチャ依存コード
-  boot/           ブートセクタ (boot.s) とローダテーブル
-  start.s         リアルモード → プロテクトモード遷移
-  main.c          カーネルエントリポイント、初期化シーケンス
-  intr.s          SAVE_ALL/RESTORE_ALL、全割り込み/例外/syscall エントリ
-  klib.s          start_first/second_task、I/O ポートヘルパ、スピンロック
-  proc.c          タスク proc_t 管理、偽 pt_regs フレーム構築、CPU アフィニティ
-  interrupt.c     IDT セットアップ、IRQ/例外/syscall ハンドラ登録
-  page.c          ページディレクトリ/テーブル設定 (恒等写像、U/S アクセス制御)
-  smp.c           AP 起動 (INIT/SIPI)、Local APIC タイマー
-  syscall.c       c_intr_syscall (pt_regs* から引数読み出し、戻り値書き戻し)
-  video.c         VGA テキストモードドライバ (0xB8000)
-  keyboard.c      PS/2 キーボードドライバ、IRQ1
-  timer.c         PIT (8254) 初期化
-  tss.c           TSS 初期化、動的 esp0 更新
+SAVE_ALL:    Executed at the beginning of every interrupt/syscall
+             Push EAX,ECX,EDX,EBX,EBP,ESI,EDI,DS,ES onto per-task kernel stack
 
-kernel/         アーキテクチャ非依存 ITRON カーネル
-  syscall.c       itron_syscall ディスパッチャ
-  syscallP.h      syscall_entry[] ディスパッチテーブル
-  sys_tsk.c       タスク管理 (cre/act/slp/wup/ter_tsk, ...)
-  sys_sem.c       セマフォ (cre/sig/wai/pol_sem)
-  sys_flg.c       イベントフラグ
-  sys_dtq.c       データキュー (リングバッファ)
-  sys_mbf.c       メッセージバッファ
-  sys_mbx.c       メールボックス
-  sys_exd.c       拡張 syscall (VGA、キーボード、スタック確保)
-  sched.c         優先度ベーススケジューラ、レディキュー、タイムアウトキュー
-  pool.c          メモリプール (スタック / ユーザメモリ / カーネルメモリ)
-  user.c          デモ用ユーザタスク (first_task, second_task, usr_main, kbd_task)
+intr_leave:  Executed only when returning from the outermost interrupt (k_nest == 0)
+             current_proc[cpu]->kern_esp = ESP   (save current task's ESP)
+             sched_next_tsk_check(cpu)           (task switch decision)
+             ESP = current_proc[cpu]->kern_esp   (load new task's ESP)
+             tss_update_esp0()                   (update TSS.esp0 for new task)
 
-lib/            ユーザ空間ライブラリ (.user_text にリンク)
-  lib_tsk.c       タスク管理ラッパー (cre_tsk, slp_tsk, ...)
-  lib_sem.c       セマフォ/フラグ/DTQ/メールボックスラッパー
-  lib_mbf.c       メッセージバッファラッパー
-  lib_exd.c       拡張 syscall ラッパー (print_at, set_key_task, ...)
+RESTORE_ALL: Pop ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX
+             → Restored from the new task's kernel stack, so the task switches
 
-include/        共有ヘッダ
-  itron.h         ITRON 型定義、エラーコード、TFN_* 関数コード
-  config.h        カーネル制限 (MAX_TSKID=16, TMAX_TPRI=16, ...)
-  exd.h           非 ITRON 拡張 API プロトタイプ
+iret:        Atomically restore CS:EIP, SS:ESP, EFLAGS → new task begins executing in Ring 3
+```
+
+See [docs/en/context-switch.md](docs/en/context-switch.md) for details.
+
+## Source Structure
+
+```
+i386/           Architecture-dependent code
+  boot/           Boot sector (boot.s) and loader tables
+  start.s         Real mode → protected mode transition
+  main.c          Kernel entry point, initialization sequence
+  intr.s          SAVE_ALL/RESTORE_ALL, all interrupt/exception/syscall entries
+  klib.s          start_first/second_task, I/O port helpers, spinlocks
+  proc.c          Task proc_t management, fake pt_regs frame construction, CPU affinity
+  interrupt.c     IDT setup, IRQ/exception/syscall handler registration
+  page.c          Page directory/table setup (identity mapping, U/S access control)
+  smp.c           AP startup (INIT/SIPI), Local APIC timer
+  syscall.c       c_intr_syscall (read args from pt_regs*, write back return value)
+  video.c         VGA text mode driver (0xB8000)
+  keyboard.c      PS/2 keyboard driver, IRQ1
+  timer.c         PIT (8254) initialization
+  tss.c           TSS initialization, dynamic esp0 update
+
+kernel/         Architecture-independent ITRON kernel
+  syscall.c       itron_syscall dispatcher
+  syscallP.h      syscall_entry[] dispatch table
+  sys_tsk.c       Task management (cre/act/slp/wup/ter_tsk, ...)
+  sys_sem.c       Semaphores (cre/sig/wai/pol_sem)
+  sys_flg.c       Event flags
+  sys_dtq.c       Data queues (ring buffer)
+  sys_mbf.c       Message buffers
+  sys_mbx.c       Mailboxes
+  sys_exd.c       Extended syscalls (VGA, keyboard, stack allocation)
+  sched.c         Priority-based scheduler, ready queue, timeout queue
+  pool.c          Memory pool (stack / user memory / kernel memory)
+  user.c          Demo user tasks (first_task, second_task, usr_main, kbd_task)
+
+lib/            User-space library (linked into .user_text)
+  lib_tsk.c       Task management wrappers (cre_tsk, slp_tsk, ...)
+  lib_sem.c       Semaphore/flag/DTQ/mailbox wrappers
+  lib_mbf.c       Message buffer wrappers
+  lib_exd.c       Extended syscall wrappers (print_at, set_key_task, ...)
+
+include/        Shared headers
+  itron.h         ITRON type definitions, error codes, TFN_* function codes
+  config.h        Kernel limits (MAX_TSKID=16, TMAX_TPRI=16, ...)
+  exd.h           Non-ITRON extended API prototypes
 
 docs/
-  ja/             ドキュメント (日本語)
-  en/             ドキュメント (英語、準備中)
+  ja/             Documentation (Japanese)
+  en/             Documentation (English)
 ```
 
-## ドキュメント
+## Documentation
 
-すべて日本語 (`docs/ja/`)。`docs/ja/refs/` にはファイルごとの詳細リファレンスもある。
+Available in Japanese (`docs/ja/`) and English (`docs/en/`). `docs/ja/refs/` also contains per-file detailed references.
 
-| ドキュメント | 内容 |
+| Document | Contents |
 |---|---|
-| [system-overview.md](docs/ja/system-overview.md) | アーキテクチャ概要 — 全体像を最初に読む |
-| [i386-architecture.md](docs/ja/i386-architecture.md) | GDT、IDT、TSS、PIC、ページング — i386 ハードウェア基礎 |
-| [build-system.md](docs/ja/build-system.md) | ビルドプロセス、リンカスクリプト、環境構築 |
-| [boot-sector.md](docs/ja/boot-sector.md) | ブートセクタとフロッピーロード |
-| [memory-map.md](docs/ja/memory-map.md) | 物理メモリ配置 |
-| [context-switch.md](docs/ja/context-switch.md) | SAVE_ALL/RESTORE_ALL とコンテキストスイッチの仕組み |
-| [syscall.md](docs/ja/syscall.md) | syscall 処理フロー (ユーザ → カーネル → 復帰) |
-| [timer-interrupt.md](docs/ja/timer-interrupt.md) | タイマー割り込みと SAVE_ALL/RESTORE_ALL の詳細 |
-| [smp-basics.md](docs/ja/smp-basics.md) | SMP 起動、APIC 設定、per-CPU データ |
-| [itron-guide.md](docs/ja/itron-guide.md) | ITRON API 入門 |
-| [keyboard.md](docs/ja/keyboard.md) | キーボードドライバと DTQ/MBF パイプライン |
-| [timeout.md](docs/ja/timeout.md) | タイムアウト機構 (tslp_tsk, trcv_dtq, twai_sem) |
-| [vga-text-mode.md](docs/ja/vga-text-mode.md) | VGA テキストモードプログラミング |
-| [gdb-debugging.md](docs/ja/gdb-debugging.md) | GDB デバッグガイド |
-| [source-guide.md](docs/ja/source-guide.md) | ソースファイルリファレンス |
-| [docs/refs/](docs/ja/refs/) | ファイルごとの詳細リファレンス |
+| [system-overview.md](docs/en/system-overview.md) | Architecture overview — read this first for the big picture |
+| [i386-architecture.md](docs/en/i386-architecture.md) | GDT, IDT, TSS, PIC, paging — i386 hardware fundamentals |
+| [build-system.md](docs/en/build-system.md) | Build process, linker scripts, environment setup |
+| [boot-sector.md](docs/en/boot-sector.md) | Boot sector and floppy loading |
+| [memory-map.md](docs/en/memory-map.md) | Physical memory layout |
+| [context-switch.md](docs/en/context-switch.md) | SAVE_ALL/RESTORE_ALL and context switch mechanics |
+| [syscall.md](docs/en/syscall.md) | Syscall processing flow (user → kernel → return) |
+| [timer-interrupt.md](docs/en/timer-interrupt.md) | Timer interrupts and SAVE_ALL/RESTORE_ALL in detail |
+| [smp-basics.md](docs/en/smp-basics.md) | SMP startup, APIC configuration, per-CPU data |
+| [itron-guide.md](docs/en/itron-guide.md) | ITRON API introduction |
+| [keyboard.md](docs/en/keyboard.md) | Keyboard driver and DTQ/MBF pipeline |
+| [timeout.md](docs/en/timeout.md) | Timeout mechanism (tslp_tsk, trcv_dtq, twai_sem) |
+| [vga-text-mode.md](docs/en/vga-text-mode.md) | VGA text mode programming |
+| [gdb-debugging.md](docs/en/gdb-debugging.md) | GDB debugging guide |
+| [source-guide.md](docs/en/source-guide.md) | Source file reference |
+| [docs/ja/refs/](docs/ja/refs/) | Per-file detailed reference (Japanese only) |
 
-## ITRON syscall 対応状況
+## ITRON Syscall Status
 
-| カテゴリ          | 実装済み                                                | 状態          |
+| Category          | Implemented                                            | Status        |
 |-------------------|--------------------------------------------------------|---------------|
-| タスク管理        | cre_tsk, act_tsk, slp_tsk, wup_tsk, ter_tsk, chg_pri  | 動作確認済み  |
-| タスク管理        | tslp_tsk, ext_tsk, exd_tsk, sus_tsk                    | 実装あり      |
-| セマフォ          | cre_sem, sig_sem, wai_sem, pol_sem, twai_sem           | 動作確認済み  |
-| イベントフラグ    | cre_flg, set_flg, wai_flg, pol_flg                     | 実装あり      |
-| データキュー      | cre_dtq, snd_dtq, psnd_dtq, ipsnd_dtq, rcv_dtq, trcv_dtq | 動作確認済み  |
-| メッセージバッファ | cre_mbf, psnd_mbf, trcv_mbf                           | 動作確認済み  |
-| メールボックス    | cre_mbx, snd_mbx, rcv_mbx                              | 実装あり      |
-| タイマー          | dly_tsk (tslp_tsk ベース)                              | 動作確認済み  |
-| 拡張 (独自)       | print_at, set_key_task, clear_screen, tsk_stack_alloc  | 動作確認済み  |
+| Task management   | cre_tsk, act_tsk, slp_tsk, wup_tsk, ter_tsk, chg_pri | Verified      |
+| Task management   | tslp_tsk, ext_tsk, exd_tsk, sus_tsk                   | Implemented   |
+| Semaphores        | cre_sem, sig_sem, wai_sem, pol_sem, twai_sem           | Verified      |
+| Event flags       | cre_flg, set_flg, wai_flg, pol_flg                    | Implemented   |
+| Data queues       | cre_dtq, snd_dtq, psnd_dtq, ipsnd_dtq, rcv_dtq, trcv_dtq | Verified  |
+| Message buffers   | cre_mbf, psnd_mbf, trcv_mbf                           | Verified      |
+| Mailboxes         | cre_mbx, snd_mbx, rcv_mbx                             | Implemented   |
+| Timers            | dly_tsk (based on tslp_tsk)                            | Verified      |
+| Extended (custom) | print_at, set_key_task, clear_screen, tsk_stack_alloc  | Verified      |
 
-「動作確認済み」= 実行デモで検証済み。「実装あり」= コードは存在するが十分なテストは未実施。
+"Verified" = tested in the running demo. "Implemented" = code exists but not sufficiently tested.
 
-## 経緯
+## History
 
-2000 年に [t-ishii66](https://github.com/t-ishii66) が "SMP MicroITRON ver 4.0.0" として
-作成。IBM PC/AT 互換機の i386 CPU 向けに Micro ITRON 4.0 仕様を個人で実装した
-趣味プロジェクトだった。
+Created in 2000 by [t-ishii66](https://github.com/t-ishii66) as "SMP MicroITRON ver 4.0.0".
+It was a hobby project implementing the Micro ITRON 4.0 specification for the i386 CPU
+on IBM PC/AT compatible machines.
 
-2026 年に教育用プラットフォームとして再始動:
-詳細なドキュメントを追加し、割り込みハンドリングと SMP コンテキストスイッチの
-致命的なバグを修正し、カーネルの動作をリアルタイムで観察できる
-マルチタスクデモを構築した。
+Revived in 2026 as an educational platform:
+detailed documentation was added, critical bugs in interrupt handling and SMP context switching
+were fixed, and a multitask demo was built to observe kernel behavior in real time.
 
-## ライセンス
+## License
 
-フリーソフトウェア。著作権表示はソースファイルを参照。
+Free software. See individual source files for copyright notices.
 
-## クレジット
+## Credits
 
-- 2000年版プログラミング: t-ishii66
-- 2026年版割り込み構造、SMP修正: Claude Opus 4.6, t-ishii66
-- ドキュメント: Claude Opus 4.6
-- コードレビュー: t-ishii66
-- ドキュメントレビュー: t-ishii66
-- デバッグ拡張: Claude Opus 4.6
+- 2000 version programming: t-ishii66
+- 2026 version interrupt architecture, SMP fixes: Claude Opus 4.6, t-ishii66
+- Documentation: Claude Opus 4.6
+- Code review: t-ishii66
+- Documentation review: t-ishii66
+- Debug enhancements: Claude Opus 4.6
 
 Copyright(C) 2000-2026 t-ishii66. All rights reserved.
 
-## 参考文献
+## References
 
-- [Micro ITRON 4.0 仕様書](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) (英語)
-- [ITRON プロジェクト](https://www.ertl.jp/ITRON/) —— 東京大学 坂村健教授による設計
+- [Micro ITRON 4.0 Specification](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html)
+- [ITRON Project](https://www.ertl.jp/ITRON/) — Designed by Prof. Ken Sakamura, University of Tokyo
 - [Intel i386 Programmer's Reference Manual](https://css.csail.mit.edu/6.858/2014/readings/i386.pdf)
-- [OSDev Wiki](https://wiki.osdev.org/) —— ベアメタル x86 プログラミングの定番リファレンス
+- [OSDev Wiki](https://wiki.osdev.org/) — The go-to reference for bare-metal x86 programming

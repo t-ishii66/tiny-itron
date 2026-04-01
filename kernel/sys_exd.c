@@ -59,6 +59,14 @@ sys_key_set_task(W apic, int task_id)
 	return E_OK;
 }
 
+/* sys_vga_set_cursor ------------------------------------------------------*/
+ER
+sys_vga_set_cursor(W apic, int row, int col)
+{
+	vga_set_cursor(row, col);
+	return E_OK;
+}
+
 /* sys_stack_alloc_sc ------------------------------------------------------*/
 ER
 sys_stack_alloc_sc(W apic, int size)

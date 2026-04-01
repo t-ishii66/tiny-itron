@@ -298,6 +298,17 @@ void printk(char *s, ...)
 }
 ```
 
+**なぜ `kernel_lk` ではなく別の `video_lk` を使うのか**:
+ISR ハンドラ (`c_intr_irq0` 等) は `kernel_lk` を保持した状態で呼ばれる。
+もし `printk` 内でも `kernel_lk` を取得すると、ISR 内から `printk` を
+呼んだ瞬間に **同一 CPU でデッドロック** する (`xchgl` スピンロックは非再帰)。
+そのため VGA 出力には別のロック変数 `video_lk` を用いる。
+
+現在のランタイムコードでは ISR 内から `printk` を呼ぶ箇所はないが
+(画面更新は `vga_write_dec_at` 等のロックなし関数で行っている)、
+デバッグ時に ISR 内へ `printk` を差し込むことは頻繁にあるため、
+安全策として分離してある。
+
 ### カスタム va_list 実装
 
 標準ライブラリを使えないため、`va_list` を独自に実装している:

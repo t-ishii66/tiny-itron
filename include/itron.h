@@ -306,6 +306,7 @@ typedef struct t_msg_pri {
 #define TFN_EXD_KEY_GETC    -0xe7	/* key_getc */
 #define TFN_EXD_KEY_SETTASK -0xe8	/* set key_task_id */
 #define TFN_EXD_STACK_ALLOC -0xe9	/* tsk_stack_alloc */
+#define TFN_EXD_VGA_CURSOR  -0xea	/* vga_set_cursor */
 
 /* task status --------------------------------------------------------------*/
 #define TTS_RUN		0x01

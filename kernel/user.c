@@ -147,6 +147,9 @@ draw_header(void)
 	print_at(ROW_COPYRIGHT, 2,
 		"Copyright (c) 2000-2026 t-ishii66. All rights reserved.", ATTR_DARK);
 
+	/* place hardware cursor at kbd_task input position (col 20 = after "> ") */
+	set_cursor(ROW_KBD, 20);
+
 	/* -- SMP architecture diagram (rows 16-22) -- */
 	/* CPU 0 box (cyan, matching [CPU0] labels) */
 	print_at(16, 22, ".---------.", ATTR_CYAN);
@@ -491,6 +494,7 @@ kbd_task(VP_INT arg)
 				kbd_col = 20;
 				line_pos = 0;
 			}
+			set_cursor(ROW_KBD, kbd_col);
 		} else if (c == '\r') {
 			/* Enter: send line (or empty) via MBF 1 */
 			psnd_mbf(1, line_buf, line_pos);
@@ -498,12 +502,14 @@ kbd_task(VP_INT arg)
 				kbd_max - 20, ' ', 0x0E);
 			kbd_col = 20;
 			line_pos = 0;
+			set_cursor(ROW_KBD, kbd_col);
 		} else if (c == '\b') {
 			/* Backspace: erase last char from buffer + screen */
 			if (kbd_col > 20 && line_pos > 0) {
 				kbd_col--;
 				line_pos--;
 				fill_at(ROW_KBD, kbd_col, 1, ' ', 0x0E);
+				set_cursor(ROW_KBD, kbd_col);
 			}
 		}
 	}
