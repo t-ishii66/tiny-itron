@@ -4,9 +4,9 @@
 
 **Japanese version: [README-ja.md](README-ja.md)**
 
-A toy RTOS kernel for i386 based on the [Micro ITRON 4.0](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Supports SMP (2 CPUs).
+An educational bare-metal RTOS (real-time operating system) kernel for i386 (x86/IA-32) based on the [Micro ITRON 4.0 (μITRON)](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Features SMP (2 CPUs), preemptive multitasking, and full interrupt handling with context switching — all running on QEMU.
 Originally created around 2000 as a hobby project; several changes were made to publish the kernel on GitHub.
-It's a toy kernel, but you can try it immediately in a QEMU virtual environment. If you're looking for a textbook-style kernel study, this project may not have much to offer. However, if you enjoy programming and are interested in gaining an intuitive understanding of the boot process and multitasking, we hope this can be of help.
+It's a toy OS kernel, but you can try it immediately in a QEMU virtual environment. If you're looking for a textbook-style kernel study, this project may not have much to offer. However, if you enjoy programming and want to learn how boot sectors, GDT/IDT setup, and task scheduling actually work at the hardware level, we hope this can be of help.
 AI was used to create the documentation. We believe it was generated mostly correctly, but there may be places where the explanation is insufficient and slipped through review. In that case, try asking your own AI to analyze the source code directly — that will likely give you the correct answer.
 
 ![](screenshot.png)
@@ -339,3 +339,10 @@ Copyright(C) 2000-2026 t-ishii66. All rights reserved.
 - [ITRON Project](https://www.ertl.jp/ITRON/) — Designed by Prof. Ken Sakamura, University of Tokyo
 - [Intel i386 Programmer's Reference Manual](https://css.csail.mit.edu/6.858/2014/readings/i386.pdf)
 - [OSDev Wiki](https://wiki.osdev.org/) — The go-to reference for bare-metal x86 programming
+
+## Keywords
+
+`RTOS` `real-time operating system` `ITRON` `Micro ITRON` `μITRON` `i386` `x86` `IA-32`
+`bare metal` `OS kernel` `SMP` `multiprocessor` `context switch` `preemptive multitasking`
+`boot sector` `GDT` `IDT` `TSS` `PIC` `APIC` `interrupt handling` `task scheduling`
+`QEMU` `educational` `learning` `tutorial`
