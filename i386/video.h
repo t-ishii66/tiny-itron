@@ -14,5 +14,6 @@ void printk(char*, ...);
 void vga_clear(void);
 void vga_write_at(int row, int col, char *s, unsigned char attr);
 void vga_write_dec_at(int row, int col, unsigned long n, int width, unsigned char attr);
+void vga_set_cursor(int row, int col);
 
 #endif

@@ -13,6 +13,7 @@ ER sys_vga_fill_at();
 ER sys_key_getc_sc();
 ER sys_key_set_task();
 ER sys_stack_alloc_sc();
+ER sys_vga_set_cursor();
 
 /* TCP/IP function code (network removed, kept for dispatch stub) */
 #ifndef TFN_TCP_CRE_REP
@@ -263,7 +264,8 @@ struct syscall_entry syscall_entry[] = {
 	sys_vga_fill_at,		/* 0xe6 */
 	sys_key_getc_sc,		/* 0xe7 */
 	sys_key_set_task,		/* 0xe8 */
-	sys_stack_alloc_sc		/* 0xe9 */
+	sys_stack_alloc_sc,		/* 0xe9 */
+	sys_vga_set_cursor		/* 0xea */
 #endif
 };
 

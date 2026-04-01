@@ -25,6 +25,12 @@ ITRON 仕様では、待ちサービスコールに TMO (タイムアウト値) 
 | CPU 0 | APIC タイマー | 0xFD | **タスクスイッチ契機のみ**: EOI だけ。`intr_leave` を通るので `next_tsk_flag` チェックの機会になる |
 | CPU 1 | APIC タイマー | 0xFE | **タスクスイッチ契機のみ**: EOI だけ。CPU 1 には PIT が来ないため、これがプリエンプティブスイッチの唯一の契機 |
 
+> **注**: CPU 0 の APIC タイマーは実質的に不要である。PIT (IRQ0) がすでに
+> CPU 0 に周期割り込みを提供しており、`intr_leave` を通るためプリエンプション
+> 契機も兼ねている。CPU 1 の APIC タイマーは PIT が届かない CPU 1 にとって
+> 不可欠だが、CPU 0 側は PIT だけで足りる。現状は両 CPU とも APIC タイマーを
+> 有効にしているだけで、深い設計意図はない。
+
 **重要**: `sched_timeout` を呼ぶのは **CPU 0 の PIT だけ** である。タイムアウト
 キューは全 CPU で共有 (`kernel_lk` で排他) だが、delta の減算は PIT の ~17ms 周期
 のみに基づく。もし複数のタイマーが `sched_timeout` を呼ぶと、delta が二重に
@@ -219,14 +225,14 @@ APIC タイマーの ISR から `delta=1` で呼ばれる。
 
 ## タイムアウト付き待ちの動作例: trcv_dtq
 
-`trcv_dtq(dtqid, &data, 40)` を呼んだ場合:
+`trcv_dtq(dtqid, &data, 20)` を呼んだ場合:
 
 ### 正常起床パス (データ到着)
 
 1. `sys_trcv_dtq` が DTQ リングバッファを確認 → 空
 2. タスクの wlink を DTQ 受信待ちキューに挿入 (`ins_fifo`)
-3. `sys_tslp_tsk(apic, 40)` を呼び出し:
-   - tlink.delta = 40 に設定
+3. `sys_tslp_tsk(apic, 20)` を呼び出し:
+   - tlink.delta = 20 に設定
    - plink をスケジューラキューから除去
    - tskstat = TTS_WAI
    - `sched_timeout_ins` でタイムアウトキューに挿入
@@ -245,7 +251,7 @@ APIC タイマーの ISR から `delta=1` で呼ばれる。
 ### タイムアウト起床パス
 
 1-3. 正常起床パスと同じ
-4. 40 ティック経過してもデータが到着しない
+4. 20 ティック経過してもデータが到着しない
 5. PIT タイマー割り込み → `c_intr_irq0` → `timer_intr(0,1)` → `sched_timeout(0,1)`:
    - 先頭エントリの delta が 0 に到達
    - wlink が自己参照でなければ DTQ 受信待ちキューから `wlink_rem` で除去

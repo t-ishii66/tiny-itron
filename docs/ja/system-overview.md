@@ -335,13 +335,24 @@ while (1) {
 
     /* Task 3 と同じ LOCK/REST/TRY の 3 フェーズ */
     if (have_sem) {
+        /* LOCK フェーズ: セマフォ保持中に shared_count++ */
         shared_count++;
-        if (phase_cnt >= SEM_HOLD)
-            sig_sem(1);
+        phase_cnt++;
+        if (phase_cnt >= SEM_HOLD) {
+            sig_sem(1);         /* セマフォ解放 */
+            have_sem = 0;
+            phase_cnt = 0;      /* → REST フェーズへ */
+        }
     } else if (phase_cnt < SEM_REST) {
+        /* REST フェーズ: セマフォに触らない (40 回スキップ) */
         phase_cnt++;
     } else {
-        if (pol_sem(1) == E_OK) { ... }
+        /* TRY フェーズ: セマフォ取得を試みる */
+        if (pol_sem(1) == E_OK) {
+            have_sem = 1;
+            phase_cnt = 0;      /* → LOCK フェーズへ */
+            shared_count++;
+        }
     }
 
     delay();
@@ -372,10 +383,14 @@ Task 2 (CPU 1) と Task 3 (CPU 0) が同時に `pol_sem(1)` を呼ぶと:
     │                       ←───┘  │
     │                           ├─ kernel_lk 取得 ✓
     │                           │  sys_pol_sem
-    │                           │  semcnt=0, E_TMOUT
+    │                           │  semcnt=0, E_TMOUT (※)
     │                           ├─ kernel_lk 解放
     ▼                           ▼
   LOCK 表示                   BUSY 表示
+
+※ ITRON の pol_sem はポーリング (非ブロッキング) 取得である。
+  資源が取れないとき E_TMOUT を返すのは仕様通り (TMO_POL 相当)。
+  「タイムアウト」ではなく「即座に失敗」の意味。
 ```
 
 `kernel_lk` (BKL) が CPU 間のアトミック性を保証する。
@@ -667,10 +682,15 @@ BKL であればロック境界の誤りは **原理的に起きない**。
 
 ### video_lk が別な理由
 
-`printk` は syscall (`sys_printf`) と ISR の両方から呼ばれる。
-ISR は `kernel_lk` を保持して呼ばれるため、`printk` 内で `kernel_lk` を
-取ると **同一 CPU でデッドロック** する。
+`printk` は syscall (`sys_printf`) と ISR の両方から呼ばれうる。
+ISR は `kernel_lk` を保持した状態で実行されるため、`printk` 内で `kernel_lk` を
+取ると **同一 CPU でデッドロック** する (`xchgl` スピンロックは非再帰)。
 そのため VGA 出力の保護には別のロック変数 `video_lk` を使う。
+
+現在のランタイムコードでは ISR 内から `printk` を呼ぶ箇所はない
+(画面更新は `vga_write_dec_at` 等のロックなし関数で行っている) が、
+デバッグ時に ISR 内へ `printk` を差し込むことは頻繁にあるため、
+安全策として分離してある。
 
 ### IF=0 との関係
 
@@ -861,17 +881,17 @@ CPU 1 の APIC タイマーも EOI のみ (`c_intr_smp_timer1`)。
    0:  TinyITRON/386 SMP (2 CPU)                      [Ctrl+C to quit]
    1:  ======================================================================...
    2:
-   3:    Timer      tick =    172616
+   3:    Timer      tick =     25366
    4:
-   5:  [CPU0] Task1 | #    7806   mbf: -
+   5:  [CPU0] Task1 \ #    1151   mbf: -
    6:
-   7:  [CPU0] Task3 \ #    7807   [LOCK]---+
-   8:                                       \
-   9:                            +---> Shared (sem 1)   #    18709
-  10:                                      /
-  11:  [CPU1] Task2 - #   66250   [BUSY]---+
+   7:  [CPU0] Task3 - #    1150   [LOCK]---+
+   8:
+   9:                            +---> Shared (sem 1)   #     3095
+  10:
+  11:  [CPU1] Task2 : #   10856   [BUSY]---+
   12:
-  13:  [CPU1] Task4   >
+  13:  [CPU1] Task4   > _
   14:
   15:
   16:                      .---------.             .---------.
@@ -880,7 +900,7 @@ CPU 1 の APIC タイマーも EOI のみ (`c_intr_smp_timer1`)。
   19:                      |  Idle5  |             |  Idle6  |
   20:                      '---------'             '---------'
   21:                            \                     /
-  22:                             '--- Shared Memory --'
+  22:                             '--- Shared Memory ---'
   23:
   24:  Copyright (c) 2000-2026 t-ishii66. All rights reserved.
 ```

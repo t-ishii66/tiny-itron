@@ -44,3 +44,9 @@ tsk_stack_alloc(int size)
 {
 	return (VP)syscall(-TFN_EXD_STACK_ALLOC, size);
 }
+
+void
+set_cursor(int row, int col)
+{
+	syscall(-TFN_EXD_VGA_CURSOR, row, col);
+}

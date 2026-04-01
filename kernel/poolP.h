@@ -1,6 +1,6 @@
 /* Copyright (c) 2000 by t-ishii66. All rights reserved. ---------------*/
-#ifndef _LIBP_H
-#define _LIBP_H
+#ifndef _POOLP_H
+#define _POOLP_H
 
 #define MAX_STACK_POOL		256
 #define MAX_MEM_POOL		256

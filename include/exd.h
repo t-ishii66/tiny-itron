@@ -11,5 +11,6 @@ void fill_at(int row, int col, int len, int ch, unsigned char attr);
 int  key_read(void);
 void set_key_task(int id);
 VP   tsk_stack_alloc(int size);
+void set_cursor(int row, int col);
 
 #endif

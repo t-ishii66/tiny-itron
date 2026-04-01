@@ -220,9 +220,14 @@ vga_clear(void)
 	scrolltop = 0;
 	c_x = 0;
 	c_y = 0;
-	/* video_set_6845 uses outb (I/O port instruction).  If called from
-	 * Ring 3 with IOPL=0, outb causes #GP.  The hardware origin is
-	 * already set to 0 by video_init (Ring 0), so skip it here. */
+	/* Reset the 6845 display origin to match scrolltop=0.
+	 * If printk scrolled during kernel init, the hardware origin
+	 * may be non-zero.  vga_write_at writes to VRAM offset 0
+	 * (ignoring scrolltop), so the hardware origin must be 0 too.
+	 *
+	 * This function is only called via sys_vga_clear (Ring 0 syscall
+	 * handler), so outb is safe here. */
+	video_set_6845(G_VID_ORG, 0);
 }
 
 /* vga_write_at -------------------------------------------------------------*/
@@ -274,6 +279,22 @@ vga_write_dec_at(int row, int col, unsigned long n, int width, unsigned char att
 		for (i = 0; i < len; i++)
 			p[pad + i] = (unsigned short)attr << 8 | (unsigned char)buf[i];
 	}
+}
+
+/* vga_set_cursor -----------------------------------------------------------*/
+/* Move the 6845 hardware cursor (blinking block) to (row, col).             */
+/* Unlike video_cursor() which tracks the internal c_x/c_y printk position,  */
+/* this sets the cursor to an arbitrary screen coordinate for user tasks.     */
+void
+vga_set_cursor(int row, int col)
+{
+	/* The 6845 cursor position register (index 14/15) takes a character
+	 * offset: position = row * 80 + col.  This is the same unit used by
+	 * G_VID_ORG (scrolltop increments by 80 per line, not 160).
+	 * Note: the existing static video_cursor() uses c_y*160+c_x which
+	 * appears incorrect, but that function is never called. */
+	unsigned short pos = row * 80 + col;
+	video_set_6845(G_CURSOR, pos);
 }
 
 /* video_putn ---------------------------------------------------------------*/
