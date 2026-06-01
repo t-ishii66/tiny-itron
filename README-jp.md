@@ -1,3 +1,10 @@
+---
+title: "tiny-itron"
+description: "Micro ITRON 4.0 仕様ベースの i386 (x86/IA-32) 向け教育用ベアメタル RTOS カーネル。SMP、プリエンプティブマルチタスク、コンテキストスイッチ、割り込みを QEMU 上で動かす。"
+keywords: "tiny-itron, μITRON, ITRON, RTOS, リアルタイムOS, ベアメタル, ベアメタルカーネル, カーネル, OSカーネル, i386, x86, IA-32, SMP, マルチタスク, プリエンプティブ, コンテキストスイッチ, 割り込み, syscall, システムコール, QEMU, GDT, IDT, TSS, APIC, ページング, スケジューラ, セマフォ, イベントフラグ, 教育用, 自作OS, 自作カーネル, OS入門, OS内部, オープンソース, チュートリアル, ドキュメント"
+lang: ja
+---
+
 <img src="top.png" width="800">
 
 # tiny-itron
@@ -12,6 +19,12 @@
 解析を依頼してみてください。おそらくそちらのほうが正解です。
 
 ![](screenshot.png)
+
+<!-- SEO intro added by setup-github-pages; review and adjust -->
+
+「**実際の OS カーネルを最初から最後まで読んで動かしたい**」「**ブートセクタ** から **GDT/IDT/TSS のセットアップ**、**ページング**、**タスクスケジューリング** がどう繋がっているか **i386 (x86/IA-32)** で知りたい」「**SMP** や **コンテキストスイッチ** を小さくて本物の例で学びたい」── そんな人のための **教育用の自作 OS カーネル** です。扱うテーマは **Micro ITRON 4.0 (μITRON)** スタイルの **syscall (システムコール)**、**プリエンプティブマルチタスク**、**PIC / APIC** を用いた **割り込みハンドリング**、**セマフォ** や **イベントフラグ**、**VGA テキストモード**、**QEMU** 上での **GDB デバッグ** など。
+
+<!-- /SEO intro -->
 
 ## このプロジェクトの目的
 
@@ -106,7 +119,7 @@ sudo apt install qemu-system-x86
 sudo apt install gdb
 ```
 
-詳しくは [docs/ja/build-system.md](docs/ja/build-system.md) を参照。
+詳しくは [docs/jp/build-system.md](docs/jp/build-system.md) を参照。
 
 ## ビルドと実行
 
@@ -141,7 +154,7 @@ gdb i386/_kernel_dbg
 (gdb) p shared_count          # セマフォで保護された共有カウンタ
 ```
 
-詳しくは [docs/ja/gdb-debugging.md](docs/ja/gdb-debugging.md) を参照。
+詳しくは [docs/jp/gdb-debugging.md](docs/jp/gdb-debugging.md) を参照。
 
 ## アーキテクチャ
 
@@ -200,7 +213,7 @@ slp_tsk()
                                     -> iret  ----[gate]----> ユーザに復帰
 ```
 
-詳しくは [docs/ja/syscall.md](docs/ja/syscall.md) を参照。
+詳しくは [docs/jp/syscall.md](docs/jp/syscall.md) を参照。
 
 ### コンテキストスイッチ
 
@@ -220,7 +233,7 @@ RESTORE_ALL: ES,DS,EDI,ESI,EBP,EBX,EDX,ECX,EAX を pop
 iret:        CS:EIP, SS:ESP, EFLAGS をアトミックに復元 → 新タスクが Ring 3 で実行開始
 ```
 
-詳しくは [docs/ja/context-switch.md](docs/ja/context-switch.md) を参照。
+詳しくは [docs/jp/context-switch.md](docs/jp/context-switch.md) を参照。
 
 ## ソース構成
 
@@ -273,26 +286,26 @@ docs/
 
 ## ドキュメント
 
-すべて日本語 (`docs/ja/`)。`docs/ja/refs/` にはファイルごとの詳細リファレンスもある。
+すべて日本語 (`docs/jp/`)。`docs/jp/refs/` にはファイルごとの詳細リファレンスもある。
 
 | ドキュメント | 内容 |
 |---|---|
-| [system-overview.md](docs/ja/system-overview.md) | アーキテクチャ概要 — 全体像を最初に読む |
-| [i386-architecture.md](docs/ja/i386-architecture.md) | GDT、IDT、TSS、PIC、ページング — i386 ハードウェア基礎 |
-| [build-system.md](docs/ja/build-system.md) | ビルドプロセス、リンカスクリプト、環境構築 |
-| [boot-sector.md](docs/ja/boot-sector.md) | ブートセクタとフロッピーロード |
-| [memory-map.md](docs/ja/memory-map.md) | 物理メモリ配置 |
-| [context-switch.md](docs/ja/context-switch.md) | SAVE_ALL/RESTORE_ALL とコンテキストスイッチの仕組み |
-| [syscall.md](docs/ja/syscall.md) | syscall 処理フロー (ユーザ → カーネル → 復帰) |
-| [timer-interrupt.md](docs/ja/timer-interrupt.md) | タイマー割り込みと SAVE_ALL/RESTORE_ALL の詳細 |
-| [smp-basics.md](docs/ja/smp-basics.md) | SMP 起動、APIC 設定、per-CPU データ |
-| [itron-guide.md](docs/ja/itron-guide.md) | ITRON API 入門 |
-| [keyboard.md](docs/ja/keyboard.md) | キーボードドライバと DTQ/MBF パイプライン |
-| [timeout.md](docs/ja/timeout.md) | タイムアウト機構 (tslp_tsk, trcv_dtq, twai_sem) |
-| [vga-text-mode.md](docs/ja/vga-text-mode.md) | VGA テキストモードプログラミング |
-| [gdb-debugging.md](docs/ja/gdb-debugging.md) | GDB デバッグガイド |
-| [source-guide.md](docs/ja/source-guide.md) | ソースファイルリファレンス |
-| [docs/refs/](docs/ja/refs/) | ファイルごとの詳細リファレンス |
+| [system-overview.md](docs/jp/system-overview.md) | アーキテクチャ概要 — 全体像を最初に読む |
+| [i386-architecture.md](docs/jp/i386-architecture.md) | GDT、IDT、TSS、PIC、ページング — i386 ハードウェア基礎 |
+| [build-system.md](docs/jp/build-system.md) | ビルドプロセス、リンカスクリプト、環境構築 |
+| [boot-sector.md](docs/jp/boot-sector.md) | ブートセクタとフロッピーロード |
+| [memory-map.md](docs/jp/memory-map.md) | 物理メモリ配置 |
+| [context-switch.md](docs/jp/context-switch.md) | SAVE_ALL/RESTORE_ALL とコンテキストスイッチの仕組み |
+| [syscall.md](docs/jp/syscall.md) | syscall 処理フロー (ユーザ → カーネル → 復帰) |
+| [timer-interrupt.md](docs/jp/timer-interrupt.md) | タイマー割り込みと SAVE_ALL/RESTORE_ALL の詳細 |
+| [smp-basics.md](docs/jp/smp-basics.md) | SMP 起動、APIC 設定、per-CPU データ |
+| [itron-guide.md](docs/jp/itron-guide.md) | ITRON API 入門 |
+| [keyboard.md](docs/jp/keyboard.md) | キーボードドライバと DTQ/MBF パイプライン |
+| [timeout.md](docs/jp/timeout.md) | タイムアウト機構 (tslp_tsk, trcv_dtq, twai_sem) |
+| [vga-text-mode.md](docs/jp/vga-text-mode.md) | VGA テキストモードプログラミング |
+| [gdb-debugging.md](docs/jp/gdb-debugging.md) | GDB デバッグガイド |
+| [source-guide.md](docs/jp/source-guide.md) | ソースファイルリファレンス |
+| [docs/refs/](docs/jp/refs/) | ファイルごとの詳細リファレンス |
 
 ## ITRON syscall 対応状況
 

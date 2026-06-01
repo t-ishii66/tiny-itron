@@ -27,3 +27,12 @@ boot-old/1st/1stboot
 
 # CVS directories
 CVS/
+
+# Jekyll / GitHub Pages
+_site/
+.jekyll-cache/
+.jekyll-metadata
+
+# Review notes / scratch — local-only
+PROBLEMS.md
+*PROBLEMS*.md

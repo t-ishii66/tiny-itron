@@ -1,3 +1,41 @@
+title: "tiny-itron"
+description: >-
+  Educational bare-metal RTOS kernel for i386 (x86/IA-32) based on the
+  Micro ITRON 4.0 (μITRON) specification. SMP (2 CPUs), preemptive
+  multitasking, full interrupt handling and context switching — all
+  running on QEMU. A small (~8000 LOC) hobby kernel for learning how
+  boot, GDT/IDT/TSS, paging, and task scheduling actually work.
+
+url: "https://t-ishii66.github.io"
+baseurl: "/tiny-itron"
+repository: t-ishii66/tiny-itron
+
+theme: jekyll-theme-cayman
+
+author: t-ishii66
+lang: en
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
 exclude:
   - CLAUDE.md
   - PROBLEMS.md
+  - "*.bak"
+  - "*PROBLEMS*.md"
+  - Makefile
+  - build/
+  - dist/
+  - target/
+  - node_modules/
+  - .vscode/
+  - "*.o"
+  - "*.so"
+  - "*.dylib"
+  - "*.exe"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge

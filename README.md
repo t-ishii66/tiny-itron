@@ -1,8 +1,15 @@
+---
+title: "tiny-itron"
+description: "Educational bare-metal RTOS kernel for i386 (x86/IA-32) based on Micro ITRON 4.0 — SMP, preemptive multitasking, context switch, and interrupt handling running on QEMU."
+keywords: "tiny-itron, μITRON, ITRON, RTOS, real-time OS, bare-metal kernel, OS kernel, i386, x86, IA-32, SMP, multitasking, context switch, interrupt handling, syscall, system call, QEMU, GDT, IDT, TSS, APIC, paging, scheduler, semaphore, event flag, educational, OS internals, hobby OS, toy kernel, open source, tutorial, documentation, GitHub"
+permalink: /
+---
+
 <img src="top.png" width="800">
 
 # tiny-itron
 
-**Japanese version: [README-ja.md](README-ja.md)**
+**Japanese version: [README-jp.md](README-jp.md)**
 
 An educational bare-metal RTOS (real-time operating system) kernel for i386 (x86/IA-32) based on the [Micro ITRON 4.0 (μITRON)](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Features SMP (2 CPUs), preemptive multitasking, and full interrupt handling with context switching — all running on QEMU.
 Originally created around 2000 as a hobby project; several changes were made to publish the kernel on GitHub.
@@ -10,6 +17,21 @@ It's a toy OS kernel, but you can try it immediately in a QEMU virtual environme
 AI was used to create the documentation. We believe it was generated mostly correctly, but there may be places where the explanation is insufficient and slipped through review. In that case, try asking your own AI to analyze the source code directly — that will likely give you the correct answer.
 
 ![](screenshot.png)
+
+<!-- SEO intro added by setup-github-pages; review and adjust -->
+
+If you have ever wanted to **read and run a real OS kernel end-to-end** —
+build your own **bare-metal RTOS** from scratch, understand how
+**boot sector**, **GDT/IDT/TSS setup**, **paging**, and **task scheduling**
+fit together on **i386 (x86/IA-32)**, or learn **SMP** and
+**context switching** by tracing a small but real example — this
+**educational hobby OS kernel** is for you. Topics covered include
+the **Micro ITRON 4.0 (μITRON)** syscall style, **preemptive multitasking**,
+**interrupt handling** with **PIC / APIC**, **semaphores** and
+**event flags**, **VGA text mode**, and running under **QEMU** with
+**GDB** debugging.
+
+<!-- /SEO intro -->
 
 ## Purpose of This Project
 
@@ -271,7 +293,7 @@ docs/
 
 ## Documentation
 
-Available in Japanese (`docs/ja/`) and English (`docs/en/`). `docs/ja/refs/` also contains per-file detailed references.
+Available in Japanese (`docs/jp/`) and English (`docs/en/`). `docs/jp/refs/` also contains per-file detailed references.
 
 | Document | Contents |
 |---|---|
@@ -290,7 +312,7 @@ Available in Japanese (`docs/ja/`) and English (`docs/en/`). `docs/ja/refs/` als
 | [vga-text-mode.md](docs/en/vga-text-mode.md) | VGA text mode programming |
 | [gdb-debugging.md](docs/en/gdb-debugging.md) | GDB debugging guide |
 | [source-guide.md](docs/en/source-guide.md) | Source file reference |
-| [docs/ja/refs/](docs/ja/refs/) | Per-file detailed reference (Japanese only) |
+| [docs/jp/refs/](docs/jp/refs/) | Per-file detailed reference (Japanese only) |
 
 ## ITRON Syscall Status
 
