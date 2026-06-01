@@ -1,7 +1,7 @@
 ---
 title: "tiny-itron"
-description: "Educational bare-metal RTOS kernel for i386 (x86/IA-32) based on Micro ITRON 4.0 — SMP, preemptive multitasking, context switch, and interrupt handling running on QEMU."
-keywords: "tiny-itron, μITRON, ITRON, RTOS, real-time OS, bare-metal kernel, OS kernel, i386, x86, IA-32, SMP, multitasking, context switch, interrupt handling, syscall, system call, QEMU, GDT, IDT, TSS, APIC, paging, scheduler, semaphore, event flag, educational, OS internals, hobby OS, toy kernel, open source, tutorial, documentation, GitHub"
+description: "Custom bare-metal RTOS kernel for i386 (x86/IA-32) based on Micro ITRON 4.0 — SMP, preemptive multitasking, context switch, and interrupt handling running on QEMU."
+keywords: "tiny-itron, μITRON, ITRON, RTOS, real-time OS, bare-metal kernel, OS kernel, i386, x86, IA-32, SMP, multitasking, context switch, interrupt handling, syscall, system call, QEMU, GDT, IDT, TSS, APIC, paging, scheduler, semaphore, event flag, custom kernel, OS internals, hobby OS, toy kernel, open source, tutorial, documentation, GitHub"
 permalink: /
 ---
 
@@ -11,7 +11,7 @@ permalink: /
 
 **Japanese version: [README-jp.md](README-jp.md)**
 
-An educational bare-metal RTOS (real-time operating system) kernel for i386 (x86/IA-32) based on the [Micro ITRON 4.0 (μITRON)](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Features SMP (2 CPUs), preemptive multitasking, and full interrupt handling with context switching — all running on QEMU.
+A custom bare-metal RTOS (real-time operating system) kernel for i386 (x86/IA-32) based on the [Micro ITRON 4.0 (μITRON)](https://www.ertl.jp/ITRON/SPEC/mitron4-e.html) specification. Features SMP (2 CPUs), preemptive multitasking, and full interrupt handling with context switching — all running on QEMU.
 Originally created around 2000 as a hobby project; several changes were made to publish the kernel on GitHub.
 It's a toy OS kernel, but you can try it immediately in a QEMU virtual environment. If you're looking for a textbook-style kernel study, this project may not have much to offer. However, if you enjoy programming and want to learn how boot sectors, GDT/IDT setup, and task scheduling actually work at the hardware level, we hope this can be of help.
 AI was used to create the documentation. We believe it was generated mostly correctly, but there may be places where the explanation is insufficient and slipped through review. In that case, try asking your own AI to analyze the source code directly — that will likely give you the correct answer.
@@ -25,7 +25,7 @@ build your own **bare-metal RTOS** from scratch, understand how
 **boot sector**, **GDT/IDT/TSS setup**, **paging**, and **task scheduling**
 fit together on **i386 (x86/IA-32)**, or learn **SMP** and
 **context switching** by tracing a small but real example — this
-**educational hobby OS kernel** is for you. Topics covered include
+**custom OS kernel** is for you. Topics covered include
 the **Micro ITRON 4.0 (μITRON)** syscall style, **preemptive multitasking**,
 **interrupt handling** with **PIC / APIC**, **semaphores** and
 **event flags**, **VGA text mode**, and running under **QEMU** with
@@ -336,7 +336,7 @@ Created in 2000 by [t-ishii66](https://github.com/t-ishii66) as "SMP MicroITRON 
 It was a hobby project implementing the Micro ITRON 4.0 specification for the i386 CPU
 on IBM PC/AT compatible machines.
 
-Revived in 2026 as an educational platform:
+Revived in 2026 as a public project:
 detailed documentation was added, critical bugs in interrupt handling and SMP context switching
 were fixed, and a multitask demo was built to observe kernel behavior in real time.
 
@@ -367,4 +367,4 @@ Copyright(C) 2000-2026 t-ishii66. All rights reserved.
 `RTOS` `real-time operating system` `ITRON` `Micro ITRON` `μITRON` `i386` `x86` `IA-32`
 `bare metal` `OS kernel` `SMP` `multiprocessor` `context switch` `preemptive multitasking`
 `boot sector` `GDT` `IDT` `TSS` `PIC` `APIC` `interrupt handling` `task scheduling`
-`QEMU` `educational` `learning` `tutorial`
+`QEMU` `custom kernel` `learning` `tutorial`
